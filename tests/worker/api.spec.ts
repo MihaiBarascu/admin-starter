@@ -1,0 +1,171 @@
+import { describe, expect, it } from "vitest";
+import { getSessionCookie, readJson, workerFetch } from "./helpers/http";
+
+const admin = {
+	name: "API Test Admin",
+	email: "api-admin@example.com",
+	password: "TestStrongPassword123!",
+	bootstrapToken: "test-bootstrap-token",
+};
+
+describe("public API", () => {
+	it("returns app metadata and health", async () => {
+		const root = await workerFetch("/api/");
+		expect(root.status).toBe(200);
+		await expect(readJson(root)).resolves.toMatchObject({
+			name: "Multiwebsite Admin Starter",
+			runtime: "Cloudflare Workers",
+		});
+
+		const health = await workerFetch("/api/health");
+		expect(health.status).toBe(200);
+		await expect(readJson(health)).resolves.toMatchObject({
+			status: "ok",
+		});
+	});
+
+	it("returns JSON 404 responses", async () => {
+		const response = await workerFetch("/api/missing");
+
+		expect(response.status).toBe(404);
+		await expect(readJson(response)).resolves.toEqual({ error: "Not found." });
+	});
+});
+
+describe("admin API", () => {
+	it("requires authentication for protected admin endpoints", async () => {
+		const response = await workerFetch("/api/admin/me");
+
+		expect(response.status).toBe(401);
+		await expect(readJson(response)).resolves.toEqual({ error: "Unauthorized." });
+	});
+
+	it("rejects oversized JSON bodies before route handlers run", async () => {
+		const response = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ payload: "x".repeat(33 * 1024) }),
+		});
+
+		expect(response.status).toBe(413);
+		await expect(readJson(response)).resolves.toEqual({
+			error: "Request body too large.",
+		});
+	});
+
+	it("bootstraps an admin, signs in, and updates safety settings", async () => {
+		const missingBootstrapToken = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...admin, bootstrapToken: "" }),
+		});
+		expect(missingBootstrapToken.status).toBe(400);
+
+		const invalidBootstrap = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...admin, bootstrapToken: "wrong-token" }),
+		});
+		expect(invalidBootstrap.status).toBe(401);
+
+		const bootstrap = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(admin),
+		});
+		expect(bootstrap.status).toBe(201);
+		await expect(readJson(bootstrap)).resolves.toEqual({ bootstrapped: true });
+
+		const duplicateBootstrap = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(admin),
+		});
+		expect(duplicateBootstrap.status).toBe(409);
+
+		const signInWithoutOrigin = await workerFetch("/api/auth/sign-in/email", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				email: admin.email,
+				password: admin.password,
+				rememberMe: true,
+			}),
+		});
+		expect(signInWithoutOrigin.status).toBe(403);
+
+		const signIn = await workerFetch("/api/auth/sign-in/email", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: "http://localhost:5173",
+			},
+			body: JSON.stringify({
+				email: admin.email,
+				password: admin.password,
+				rememberMe: true,
+			}),
+		});
+		expect(signIn.status).toBe(200);
+		const cookie = getSessionCookie(signIn);
+
+		const initialSafety = await workerFetch("/api/admin/safety", {
+			headers: { Cookie: cookie },
+		});
+		expect(initialSafety.status).toBe(200);
+		await expect(readJson(initialSafety)).resolves.toMatchObject({
+			settings: {
+				public_api_enabled: "true",
+				email_notifications_enabled: "true",
+				emergency_stop_enabled: "false",
+				daily_public_write_limit: "100",
+			},
+			status: {
+				publicApiEnabled: true,
+				emailNotificationsEnabled: true,
+				emergencyStopEnabled: false,
+			},
+		});
+
+		const updateSafety = await workerFetch("/api/admin/safety", {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: cookie,
+			},
+			body: JSON.stringify({
+				publicApiEnabled: false,
+				emergencyStopEnabled: true,
+				dailyPublicWriteLimit: 25,
+			}),
+		});
+		expect(updateSafety.status).toBe(200);
+		await expect(readJson(updateSafety)).resolves.toMatchObject({
+			updated: true,
+			safety: {
+				settings: {
+					public_api_enabled: "false",
+					emergency_stop_enabled: "true",
+					daily_public_write_limit: "25",
+				},
+				status: {
+					publicApiEnabled: false,
+					emergencyStopEnabled: true,
+				},
+			},
+		});
+
+		const invalidSafety = await workerFetch("/api/admin/safety", {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: cookie,
+			},
+			body: JSON.stringify({ unknown: true }),
+		});
+		expect(invalidSafety.status).toBe(400);
+		await expect(readJson(invalidSafety)).resolves.toEqual({
+			error: "No valid safety settings were provided.",
+		});
+	});
+});

@@ -1,0 +1,6 @@
+BETTER_AUTH_SECRET="replace-with-at-least-32-random-characters"
+BOOTSTRAP_ADMIN_TOKEN="replace-with-one-time-bootstrap-token"
+BETTER_AUTH_URL="http://localhost:5173"
+AUTH_TRUSTED_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+AUTH_SIGNUP_ENABLED="false"
+APP_NAME="Multiwebsite Admin Starter"
