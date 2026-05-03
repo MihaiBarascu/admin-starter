@@ -54,6 +54,15 @@ interface SafetyResponse {
 	};
 }
 
+type FormFeedbackState = {
+	type: "error" | "success";
+	message: string;
+} | null;
+
+interface BootstrapStatusResponse {
+	available: boolean;
+}
+
 const monitoringLinks = [
 	{
 		title: "Billable Usage",
@@ -217,6 +226,35 @@ function App() {
 }
 
 function AuthScreen(props: { error: string | null; onAuthenticated: () => void }) {
+	const [bootstrapAvailable, setBootstrapAvailable] = useState<boolean | null>(null);
+
+	useEffect(() => {
+		let active = true;
+
+		async function loadBootstrapStatus() {
+			try {
+				const response = await fetch("/api/admin/bootstrap");
+				if (!response.ok) {
+					throw new Error("Bootstrap status could not be loaded.");
+				}
+				const payload = (await response.json()) as BootstrapStatusResponse;
+				if (active) {
+					setBootstrapAvailable(payload.available);
+				}
+			} catch {
+				if (active) {
+					setBootstrapAvailable(false);
+				}
+			}
+		}
+
+		void loadBootstrapStatus();
+
+		return () => {
+			active = false;
+		};
+	}, []);
+
 	return (
 		<div className="min-h-screen bg-muted/40 p-4">
 			<div className="mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-5xl items-center gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -239,11 +277,25 @@ function AuthScreen(props: { error: string | null; onAuthenticated: () => void }
 					) : null}
 				</div>
 
-				<div className="grid gap-4">
-					<LoginCard onAuthenticated={props.onAuthenticated} />
-					<BootstrapCard onBootstrapped={props.onAuthenticated} />
-				</div>
+				<AuthCardStack
+					bootstrapAvailable={bootstrapAvailable}
+					onAuthenticated={props.onAuthenticated}
+				/>
 			</div>
+		</div>
+	);
+}
+
+export function AuthCardStack(props: {
+	bootstrapAvailable: boolean | null;
+	onAuthenticated: () => void;
+}) {
+	return (
+		<div className="grid gap-4">
+			<LoginCard onAuthenticated={props.onAuthenticated} />
+			{props.bootstrapAvailable ? (
+				<BootstrapCard onBootstrapped={props.onAuthenticated} />
+			) : null}
 		</div>
 	);
 }
@@ -251,12 +303,12 @@ function AuthScreen(props: { error: string | null; onAuthenticated: () => void }
 function LoginCard(props: { onAuthenticated: () => void }) {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [error, setError] = useState<string | null>(null);
+	const [feedback, setFeedback] = useState<FormFeedbackState>(null);
 	const [loading, setLoading] = useState(false);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		setError(null);
+		setFeedback(null);
 		setLoading(true);
 		try {
 			const response = await fetch("/api/auth/sign-in/email", {
@@ -270,7 +322,10 @@ function LoginCard(props: { onAuthenticated: () => void }) {
 			}
 			props.onAuthenticated();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Login failed.");
+			setFeedback({
+				type: "error",
+				message: err instanceof Error ? err.message : "Login failed.",
+			});
 		} finally {
 			setLoading(false);
 		}
@@ -306,7 +361,7 @@ function LoginCard(props: { onAuthenticated: () => void }) {
 							required
 						/>
 					</div>
-					{error ? <p className="text-sm text-destructive">{error}</p> : null}
+					<FormFeedback feedback={feedback} />
 					<Button type="submit" disabled={loading}>
 						<LockKeyhole className="h-4 w-4" />
 						{loading ? "Signing in..." : "Sign in"}
@@ -322,7 +377,7 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [token, setToken] = useState("");
-	const [feedback, setFeedback] = useState<string | null>(null);
+	const [feedback, setFeedback] = useState<FormFeedbackState>(null);
 	const [loading, setLoading] = useState(false);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -339,10 +394,16 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 				const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 				throw new Error(payload?.error ?? "Bootstrap failed.");
 			}
-			setFeedback("Admin account created. Sign in with the new credentials.");
+			setFeedback({
+				type: "success",
+				message: "Admin account created. Sign in with the new credentials.",
+			});
 			props.onBootstrapped();
 		} catch (err) {
-			setFeedback(err instanceof Error ? err.message : "Bootstrap failed.");
+			setFeedback({
+				type: "error",
+				message: err instanceof Error ? err.message : "Bootstrap failed.",
+			});
 		} finally {
 			setLoading(false);
 		}
@@ -364,6 +425,7 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 								autoComplete="name"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
+								required
 							/>
 						</div>
 						<div className="grid gap-2">
@@ -374,6 +436,7 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 								autoComplete="email"
 								value={email}
 								onChange={(event) => setEmail(event.target.value)}
+								required
 							/>
 						</div>
 					</div>
@@ -386,6 +449,9 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 								autoComplete="new-password"
 								value={password}
 								onChange={(event) => setPassword(event.target.value)}
+								minLength={12}
+								maxLength={128}
+								required
 							/>
 						</div>
 						<div className="grid gap-2">
@@ -396,10 +462,11 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 								autoComplete="one-time-code"
 								value={token}
 								onChange={(event) => setToken(event.target.value)}
+								required
 							/>
 						</div>
 					</div>
-					{feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
+					<FormFeedback feedback={feedback} />
 					<Button type="submit" variant="outline" disabled={loading}>
 						<CheckCircle2 className="h-4 w-4" />
 						{loading ? "Creating..." : "Create first admin"}
@@ -407,6 +474,30 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 				</form>
 			</CardContent>
 		</Card>
+	);
+}
+
+export function FormFeedback(props: { feedback: FormFeedbackState }) {
+	if (!props.feedback) {
+		return null;
+	}
+
+	if (props.feedback.type === "error") {
+		return (
+			<Alert variant="destructive">
+				<AlertTriangle className="h-4 w-4" />
+				<AlertTitle>Request failed</AlertTitle>
+				<AlertDescription>{props.feedback.message}</AlertDescription>
+			</Alert>
+		);
+	}
+
+	return (
+		<Alert role="status">
+			<CheckCircle2 className="h-4 w-4" />
+			<AlertTitle>Done</AlertTitle>
+			<AlertDescription>{props.feedback.message}</AlertDescription>
+		</Alert>
 	);
 }
 

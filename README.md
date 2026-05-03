@@ -59,11 +59,13 @@ Seed/demo data must be kept outside normal schema migrations.
 
 ```bash
 npm run test:api
+npm run test:react
 npm run lint
 npm run build
 ```
 
 `npm run test:api` runs Worker/API tests locally in the Cloudflare Workers runtime through `@cloudflare/vitest-pool-workers`. It applies D1 migrations in an isolated test database.
+`npm run test:react` runs focused React UI regression tests without the Cloudflare Worker plugin.
 
 ## Deploy
 

@@ -54,6 +54,12 @@ describe("admin API", () => {
 	});
 
 	it("bootstraps an admin, signs in, and updates safety settings", async () => {
+		const beforeBootstrap = await workerFetch("/api/admin/bootstrap");
+		expect(beforeBootstrap.status).toBe(200);
+		await expect(readJson(beforeBootstrap)).resolves.toEqual({
+			available: true,
+		});
+
 		const missingBootstrapToken = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -68,6 +74,16 @@ describe("admin API", () => {
 		});
 		expect(invalidBootstrap.status).toBe(401);
 
+		const invalidEmail = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...admin, email: "not-an-email" }),
+		});
+		expect(invalidEmail.status).toBe(400);
+		await expect(readJson(invalidEmail)).resolves.toEqual({
+			error: "Email is invalid.",
+		});
+
 		const bootstrap = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -75,6 +91,12 @@ describe("admin API", () => {
 		});
 		expect(bootstrap.status).toBe(201);
 		await expect(readJson(bootstrap)).resolves.toEqual({ bootstrapped: true });
+
+		const afterBootstrap = await workerFetch("/api/admin/bootstrap");
+		expect(afterBootstrap.status).toBe(200);
+		await expect(readJson(afterBootstrap)).resolves.toEqual({
+			available: false,
+		});
 
 		const duplicateBootstrap = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
