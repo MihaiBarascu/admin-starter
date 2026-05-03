@@ -22,13 +22,26 @@ npm run dev
 
 The local app runs at `http://localhost:5173`.
 
+## Configuration Model
+
+`wrangler.json` is the deploy configuration. For production, set the real
+`BETTER_AUTH_URL`, `AUTH_TRUSTED_ORIGINS`, `routes[].pattern`, D1
+`database_name`, and `database_id` there before connecting the repo to
+Cloudflare Builds.
+
+Local development uses `.dev.vars` for local secrets and localhost auth values.
+Do not commit `.dev.vars`.
+
+The default `wrangler.json` is compatible with Workers Free. If a project moves
+to Workers Paid, optional CPU/subrequest limits can be copied from
+`docs/examples/wrangler-paid-limits.json`.
+
 ## Required Secrets
 
 Local secrets live in `.dev.vars`. Production secrets must be set with Wrangler.
 
 ```bash
-npx wrangler secret put BETTER_AUTH_SECRET
-npx wrangler secret put BOOTSTRAP_ADMIN_TOKEN
+npm run secrets:production
 ```
 
 `BOOTSTRAP_ADMIN_TOKEN` is only needed to create the first admin user. Remove or rotate it after bootstrap.
@@ -96,8 +109,8 @@ npm run build
 ## Deploy
 
 1. Create a real D1 database.
-2. Replace the placeholder `database_id` in `wrangler.json`.
-3. Set required secrets.
+2. Set the production D1 `database_name` and `database_id` in `wrangler.json`.
+3. Set production secrets with `npm run secrets:production`.
 4. Run remote migrations.
 5. Deploy.
 
@@ -105,5 +118,16 @@ npm run build
 npm run db:migrate:remote
 npm run deploy
 ```
+
+For an interactive manual production deploy:
+
+```bash
+npm run deploy:production
+```
+
+The production deploy script runs tests, lint, build, remote migrations, and
+deploy. It also checks that the permanent `BETTER_AUTH_SECRET` exists in
+Cloudflare before deploying. `BOOTSTRAP_ADMIN_TOKEN` is intentionally optional
+after the first admin exists.
 
 Read [docs/admin-guide.md](docs/admin-guide.md) before deploying a project created from this starter.

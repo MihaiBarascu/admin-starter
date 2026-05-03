@@ -118,10 +118,20 @@ SEED_ADMIN_PASSWORD="LocalAdminPassword123!"
 ```
 
 Remote seeds act on the configured remote D1 database. Before running a remote
-seed, replace the placeholder `database_id`, apply remote migrations, and verify
-that the seed email is intended for that environment.
+seed, confirm the production `database_name` and `database_id` in `wrangler.json`,
+apply remote migrations, and verify that the seed email is intended for that
+environment.
 
 ## Local Development
+
+The project uses a simple deployment model:
+
+- `wrangler.json` is the production/deploy configuration.
+- `.dev.vars` provides local secrets and localhost auth values while developing.
+- Local D1 commands use `--local`; remote D1 commands use `--remote`.
+- The default `wrangler.json` is compatible with Workers Free. Workers Paid
+  projects can copy optional limits from
+  `docs/examples/wrangler-paid-limits.json`.
 
 Create local secrets:
 
@@ -331,19 +341,24 @@ important deploy signals.
 ### Cloudflare resources
 
 1. Create a Cloudflare D1 database for the production project.
-2. Replace the placeholder `database_id` in `wrangler.json`.
+2. Set the production D1 `database_name` and `database_id` in `wrangler.json`.
 3. Set production `BETTER_AUTH_URL` to the final HTTPS origin.
 4. Set production `AUTH_TRUSTED_ORIGINS` to the exact allowed browser origins.
-5. Configure a custom domain or route for production traffic. The default
-   `workers.dev` route and Preview URLs are disabled in `wrangler.json`.
+5. Configure a custom domain for production traffic with `routes[].pattern` and
+   `custom_domain: true`. The default `workers.dev` route and Preview URLs are
+   disabled in `wrangler.json`.
 6. Keep `AUTH_SIGNUP_ENABLED=false` unless the project intentionally allows
    public signups.
 7. Set production secrets:
 
 ```bash
-npx wrangler secret put BETTER_AUTH_SECRET
-npx wrangler secret put BOOTSTRAP_ADMIN_TOKEN
+npm run secrets:production
 ```
+
+`BETTER_AUTH_SECRET` is permanent and required for every production deploy.
+`BOOTSTRAP_ADMIN_TOKEN` is only needed while creating the first admin. After an
+admin exists, it can be rotated or deleted; when it is missing, the bootstrap UI
+is disabled.
 
 ### Cost controls
 
@@ -374,6 +389,13 @@ npm run db:migrate:remote
 
 ```bash
 npm run deploy
+```
+
+For a guided manual deploy that runs verification, remote migrations, and deploy
+in order, and checks that `BETTER_AUTH_SECRET` exists in Cloudflare:
+
+```bash
+npm run deploy:production
 ```
 
 3. Create the first admin from the bootstrap UI or by intentionally running the
