@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import app from "../../src/worker";
 import { getSessionCookie, readJson, workerFetch } from "./helpers/http";
 
 const admin = {
@@ -33,6 +34,21 @@ describe("public API", () => {
 });
 
 describe("admin API", () => {
+	it("reports bootstrap unavailable without querying D1 when bootstrap is disabled", async () => {
+		const response = await app.fetch(
+			new Request("http://localhost:5173/api/admin/bootstrap"),
+			{
+				BETTER_AUTH_SECRET: "test-better-auth-secret-at-least-32-characters",
+				BETTER_AUTH_URL: "http://localhost:5173",
+				AUTH_TRUSTED_ORIGINS: "http://localhost:5173",
+				AUTH_SIGNUP_ENABLED: "false",
+			},
+		);
+
+		expect(response.status).toBe(200);
+		await expect(readJson(response)).resolves.toEqual({ available: false });
+	});
+
 	it("requires authentication for protected admin endpoints", async () => {
 		const response = await workerFetch("/api/admin/me");
 

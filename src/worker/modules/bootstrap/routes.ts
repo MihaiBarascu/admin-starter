@@ -13,6 +13,10 @@ async function isBootstrapAvailable(env: AppEnv["Bindings"]) {
 }
 
 bootstrapRoutes.get("/", async (c) => {
+	if (!c.env.BOOTSTRAP_ADMIN_TOKEN) {
+		return c.json({ available: false });
+	}
+
 	return c.json({
 		available: await isBootstrapAvailable(c.env),
 	});

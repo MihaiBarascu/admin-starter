@@ -260,7 +260,7 @@ The admin dashboard includes external monitoring links for:
 
 These links are intentionally external. Cloudflare billing and product usage data can lag and should not be treated as a real-time kill switch.
 
-The Worker keeps observability enabled but samples logs and traces at 10% in `wrangler.json`. This preserves operational visibility while reducing the chance that a traffic spike creates a secondary logs bill. Do not add `console.log` on every request. Log only exceptional or security-relevant events, and prefer structured JSON when logging is needed.
+The Worker keeps observability enabled but samples logs and traces at 1% in `wrangler.json`. This preserves some operational visibility while reducing the chance that a traffic spike creates a secondary logs bill. Do not add `console.log` on every request. Log only exceptional or security-relevant events, and prefer structured JSON when logging is needed.
 
 ## Production Cost Controls
 
