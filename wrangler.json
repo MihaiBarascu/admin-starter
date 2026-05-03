@@ -3,6 +3,8 @@
 	"name": "multiwebsite-admin-starter",
 	"main": "./src/worker/index.ts",
 	"compatibility_date": "2025-10-08",
+	"workers_dev": false,
+	"preview_urls": false,
 	"compatibility_flags": [
 		"nodejs_compat"
 	],

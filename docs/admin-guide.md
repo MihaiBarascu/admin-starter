@@ -301,32 +301,104 @@ Suggested threshold: depends on endpoint cost and expected traffic
 
 For production, prefer a custom domain protected by Cloudflare WAF and keep `workers.dev` exposure disabled once routes/domains are configured. Do not add R2, KV, Queues, Durable Objects, Workers AI, Vectorize, Browser Rendering, or Analytics Engine without adding product-specific limits, tests, and monitoring notes.
 
-## Deploy Checklist
+## Production Deploy Checklist
 
-1. Create a Cloudflare D1 database.
+Use this checklist before every first production deploy for a project created
+from this starter.
+
+### Local verification
+
+1. Confirm the working tree contains only intentional changes.
+2. Run the local verification commands:
+
+```bash
+npm run test:api
+npm run test:react
+npm run lint
+npm run build
+```
+
+3. Run a deploy dry-run:
+
+```bash
+npm run check
+```
+
+Wrangler may print local log-file warnings in restricted environments. Treat
+TypeScript, Vite, Wrangler config, bundle size, and binding output as the
+important deploy signals.
+
+### Cloudflare resources
+
+1. Create a Cloudflare D1 database for the production project.
 2. Replace the placeholder `database_id` in `wrangler.json`.
-3. Set production `BETTER_AUTH_URL` and `AUTH_TRUSTED_ORIGINS`.
-4. Set production secrets:
+3. Set production `BETTER_AUTH_URL` to the final HTTPS origin.
+4. Set production `AUTH_TRUSTED_ORIGINS` to the exact allowed browser origins.
+5. Configure a custom domain or route for production traffic. The default
+   `workers.dev` route and Preview URLs are disabled in `wrangler.json`.
+6. Keep `AUTH_SIGNUP_ENABLED=false` unless the project intentionally allows
+   public signups.
+7. Set production secrets:
 
 ```bash
 npx wrangler secret put BETTER_AUTH_SECRET
 npx wrangler secret put BOOTSTRAP_ADMIN_TOKEN
 ```
 
-5. Apply remote migrations:
+### Cost controls
+
+Configure these in the Cloudflare dashboard before making the app public:
+
+1. Budget Alerts at small thresholds, for example `$1`, `$5`, and `$10`.
+2. Usage notifications for Workers requests and D1 rows read/written when
+   available on the account plan.
+3. WAF Rate Limiting for `POST /api/auth/*`.
+4. WAF Rate Limiting for `POST /api/admin/bootstrap`.
+5. Optional WAF rule for all future public write endpoints.
+6. Confirm the app is served from the intended custom domain and disable
+   unnecessary `workers.dev` exposure once the custom route is active.
+
+Budget alerts and usage notifications are informational only. They do not stop
+usage. WAF/rate limiting is the practical edge-level control for request spikes,
+credential stuffing, and bot traffic.
+
+### Deploy
+
+1. Apply remote migrations:
 
 ```bash
 npm run db:migrate:remote
 ```
 
-6. Build and deploy:
+2. Deploy:
 
 ```bash
-npm run build
 npm run deploy
 ```
 
-7. Create the first admin, then remove or rotate `BOOTSTRAP_ADMIN_TOKEN`.
+3. Create the first admin from the bootstrap UI or by intentionally running the
+   remote admin seed:
+
+```bash
+npm run db:seed:remote -- admin
+```
+
+4. Remove or rotate `BOOTSTRAP_ADMIN_TOKEN` immediately after the first admin
+   exists.
+5. Confirm `GET /api/admin/bootstrap` returns `{ "available": false }`.
+6. Sign in and verify protected admin routes work.
+7. Review Billable Usage, Workers metrics, D1 metrics, WAF events, and Security
+   Events after deploy.
+
+### Post-deploy monitoring
+
+For the first public release window, check Cloudflare metrics more frequently:
+
+1. Billable Usage for unexpected product spend.
+2. Workers request volume, error rate, CPU time, and subrequest behavior.
+3. D1 rows read/written.
+4. WAF rate-limit matches and blocked requests.
+5. Workers Logs sample for unexpected 500s or auth abuse.
 
 ## Future Products
 
