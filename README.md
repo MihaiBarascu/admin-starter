@@ -35,7 +35,15 @@ npx wrangler secret put BOOTSTRAP_ADMIN_TOKEN
 
 ## Database
 
-Drizzle schema is the source of truth:
+Better Auth tables are generated from the official Better Auth CLI. Regenerate
+them after changing Better Auth options or plugins:
+
+```bash
+npm run auth:schema:generate
+```
+
+Application-owned tables live outside the generated auth schema. Drizzle reads
+the combined schema and generates migrations:
 
 ```bash
 npm run db:generate
@@ -47,10 +55,28 @@ Apply migrations locally:
 npm run db:migrate:local
 ```
 
+Seed the local development admin:
+
+```bash
+npm run db:seed:local -- admin
+```
+
+The admin seed creates the configured email only when it is missing. If that email
+already exists, the seed is a no-op and does not update the name or password.
+Override the defaults with `SEED_ADMIN_NAME`, `SEED_ADMIN_EMAIL`, and
+`SEED_ADMIN_PASSWORD` in `.dev.vars`.
+
 Apply migrations remotely:
 
 ```bash
 npm run db:migrate:remote
+```
+
+Seed a remote admin only when you intentionally want to create that account in
+the configured remote D1 database:
+
+```bash
+npm run db:seed:remote -- admin
 ```
 
 Seed/demo data must be kept outside normal schema migrations.

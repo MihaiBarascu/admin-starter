@@ -20,6 +20,7 @@ This guide documents how the starter is built, how to run it, and which official
 - Drizzle Kit generate: https://orm.drizzle.team/docs/drizzle-kit-generate
 - Drizzle seed overview: https://orm.drizzle.team/docs/seed-overview
 - Better Auth Hono integration: https://better-auth.com/docs/integrations/hono
+- Better Auth CLI: https://better-auth.com/docs/concepts/cli
 - Better Auth email/password: https://better-auth.com/docs/authentication/email-password
 - Better Auth rate limit: https://better-auth.com/docs/concepts/rate-limit
 - Better Auth Drizzle adapter: https://better-auth.com/docs/adapters/drizzle
@@ -45,6 +46,8 @@ src/worker/
   auth/
     middleware.ts
   db/
+    app-schema.ts
+    auth-schema.generated.ts
     client.ts
     schema.ts
   lib/
@@ -63,17 +66,60 @@ src/worker/
 
 ## Database Rules
 
-Drizzle schema in `src/worker/db/schema.ts` is the source of truth.
+Better Auth-owned tables are generated from the official Better Auth CLI into
+`src/worker/db/auth-schema.generated.ts`. Do not edit that file manually.
 
-Use this for schema changes:
+Application-owned tables live in `src/worker/db/app-schema.ts`.
+
+`src/worker/db/schema.ts` combines both schemas and is the file Drizzle uses for
+migration generation.
+
+When Better Auth options or plugins change, regenerate the auth schema first:
+
+```bash
+npm run auth:schema:generate
+```
+
+Then generate a Drizzle migration:
 
 ```bash
 npm run db:generate
 ```
 
-The generated SQL goes into `drizzle/migrations/`. Do not hand-write normal schema migrations.
+The generated SQL goes into `drizzle/migrations/`. Do not hand-write normal
+schema migrations. Custom SQL is allowed only for data transformations Drizzle
+cannot infer, such as converting existing Better Auth timestamps when changing
+schema representation.
 
 Seed/demo data should not live in standard generated migrations. Use explicit seed scripts when needed. Runtime defaults should be handled in code where possible, as the safety module does.
+
+## Seed Scripts
+
+Seed scripts are explicit commands, not migrations. They use Wrangler's platform
+proxy and application services, so seed logic stays close to the runtime code.
+
+```bash
+npm run db:seed:local -- admin
+npm run db:seed:remote -- admin
+```
+
+The admin seed calls the application service in
+`src/worker/modules/admin-users/service.ts`. It creates the configured email only
+when that email is missing. If the email already exists, the seed is a no-op and
+does not update the name or password. This keeps seed behavior predictable and
+avoids silently changing an existing account.
+
+Local defaults can be overridden in `.dev.vars`:
+
+```text
+SEED_ADMIN_NAME="Local Admin"
+SEED_ADMIN_EMAIL="admin@example.test"
+SEED_ADMIN_PASSWORD="LocalAdminPassword123!"
+```
+
+Remote seeds act on the configured remote D1 database. Before running a remote
+seed, replace the placeholder `database_id`, apply remote migrations, and verify
+that the seed email is intended for that environment.
 
 ## Local Development
 
@@ -164,6 +210,11 @@ GET/POST /api/auth/*
 ```
 
 Admin API routes are protected by `requireAdminSession`, which calls Better Auth's `getSession` with request headers and stores `user` and `session` in Hono context variables.
+
+The runtime auth configuration lives in `src/worker/auth.ts`. Shared Better Auth
+options live in `src/worker/auth/options.ts`, and `better-auth.config.ts` exists
+only for the Better Auth CLI schema generator. The CLI config must stay free of
+real Cloudflare bindings and production secrets.
 
 Better Auth rate limiting is enabled with Cloudflare's `cf-connecting-ip` header and a stricter rule for `/sign-in/email`. This is a baseline auth protection. For production public endpoints, still configure Cloudflare WAF/rate limiting in front of the Worker.
 

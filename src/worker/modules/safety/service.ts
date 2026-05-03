@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
+import { appSetting } from "../../db/app-schema";
 import { getDb } from "../../db/client";
-import { appSetting } from "../../db/schema";
 import { isEnabled } from "../../lib/env";
 import { SAFETY_DEFAULTS, SAFETY_SETTING_KEYS } from "./defaults";
 

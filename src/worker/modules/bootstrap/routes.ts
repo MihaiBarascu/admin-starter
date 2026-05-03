@@ -1,19 +1,15 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { createAuth } from "../../auth";
-import { getDb } from "../../db/client";
-import { user } from "../../db/schema";
 import { constantTimeEqual } from "../../lib/security";
 import { jsonValidator } from "../../lib/validation";
+import { createAdminUser, hasAnyUser } from "../admin-users/service";
 import type { AppEnv } from "../../types";
 import { bootstrapRequestSchema } from "./schema";
 
 export const bootstrapRoutes = new Hono<AppEnv>();
 
 async function isBootstrapAvailable(env: AppEnv["Bindings"]) {
-	const db = getDb(env);
-	const existing = await db.select({ id: user.id }).from(user).limit(1);
-	return existing.length === 0;
+	return !(await hasAnyUser(env));
 }
 
 bootstrapRoutes.get("/", async (c) => {
@@ -35,18 +31,14 @@ bootstrapRoutes.post(
 			return c.json({ error: "Invalid bootstrap token." }, 401);
 		}
 
-		const db = getDb(c.env);
-		const existing = await db.select({ id: user.id }).from(user).limit(1);
-		if (existing.length > 0) {
+		if (await hasAnyUser(c.env)) {
 			return c.json({ error: "An admin user already exists." }, 409);
 		}
 
-		await createAuth(c.env, { allowSignUp: true }).api.signUpEmail({
-			body: {
-				name: payload.name,
-				email: payload.email,
-				password: payload.password,
-			},
+		await createAdminUser(c.env, {
+			name: payload.name,
+			email: payload.email,
+			password: payload.password,
 		});
 
 		return c.json({ bootstrapped: true }, 201);

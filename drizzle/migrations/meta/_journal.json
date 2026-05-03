@@ -8,6 +8,13 @@
       "when": 1777738848680,
       "tag": "0000_nifty_sunfire",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1777813280948,
+      "tag": "0001_minor_bullseye",
+      "breakpoints": true
     }
   ]
 }

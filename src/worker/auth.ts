@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { getDb } from "./db/client";
 import { schema } from "./db/schema";
 import { isEnabled, parseCsv } from "./lib/env";
+import { authBaseOptions } from "./auth/options";
 import type { AppBindings } from "./types";
 
 export function createAuth(env: AppBindings, options?: { allowSignUp?: boolean }) {
@@ -15,6 +16,7 @@ export function createAuth(env: AppBindings, options?: { allowSignUp?: boolean }
 	const signUpEnabled = options?.allowSignUp ?? isEnabled(env.AUTH_SIGNUP_ENABLED, false);
 
 	return betterAuth({
+		...authBaseOptions,
 		baseURL: baseUrl,
 		secret: env.BETTER_AUTH_SECRET,
 		trustedOrigins: parseCsv(env.AUTH_TRUSTED_ORIGINS),
@@ -24,32 +26,11 @@ export function createAuth(env: AppBindings, options?: { allowSignUp?: boolean }
 			transaction: false,
 		}),
 		emailAndPassword: {
-			enabled: true,
+			...authBaseOptions.emailAndPassword,
 			disableSignUp: !signUpEnabled,
-			autoSignIn: false,
-			minPasswordLength: 12,
-			maxPasswordLength: 128,
-			revokeSessionsOnPasswordReset: true,
-		},
-		rateLimit: {
-			enabled: true,
-			window: 60,
-			max: 100,
-			customRules: {
-				"/sign-in/email": {
-					window: 10,
-					max: 3,
-				},
-			},
 		},
 		advanced: {
-			ipAddress: {
-				ipAddressHeaders: ["cf-connecting-ip"],
-				ipv6Subnet: 64,
-			},
-			database: {
-				generateId: () => crypto.randomUUID(),
-			},
+			...authBaseOptions.advanced,
 			defaultCookieAttributes: {
 				httpOnly: true,
 				sameSite: "lax",
