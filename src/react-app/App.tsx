@@ -38,12 +38,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { authClient, type AuthSession } from "./lib/auth-client";
 
-interface AdminUser {
-	id: string;
-	name: string;
-	email: string;
-}
+type AdminUser = AuthSession["user"];
 
 interface SafetyResponse {
 	settings: Record<string, string | null>;
@@ -106,50 +103,54 @@ const monitoringLinks = [
 	},
 ];
 
+const jsonHeaders = {
+	Accept: "application/json",
+};
+
+const jsonBodyHeaders = {
+	...jsonHeaders,
+	"Content-Type": "application/json",
+};
+
 function App() {
-	const [user, setUser] = useState<AdminUser | null>(null);
+	const session = authClient.useSession();
+	const user = session.data?.user ?? null;
+	const userId = user?.id;
 	const [safety, setSafety] = useState<SafetyResponse | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [authError, setAuthError] = useState<string | null>(null);
+	const [adminError, setAdminError] = useState<string | null>(null);
 
 	const loadSafety = useCallback(async () => {
-		const response = await fetch("/api/admin/safety", { credentials: "include" });
+		const response = await fetch("/api/admin/safety", {
+			headers: jsonHeaders,
+			credentials: "include",
+		});
 		if (!response.ok) {
 			throw new Error("Safety settings could not be loaded.");
 		}
 		setSafety((await response.json()) as SafetyResponse);
 	}, []);
 
-	const refreshSession = useCallback(async () => {
-		setLoading(true);
-		setAuthError(null);
+	const refreshAdminData = useCallback(async () => {
 		try {
-			const response = await fetch("/api/auth/get-session", { credentials: "include" });
-			if (!response.ok) {
-				throw new Error("Session check failed.");
-			}
-			const payload = (await response.json()) as { user?: AdminUser } | null;
-			if (!payload?.user) {
-				setUser(null);
-				return;
-			}
-			setUser(payload.user);
 			await loadSafety();
+			setAdminError(null);
 		} catch (error) {
-			setAuthError(error instanceof Error ? error.message : "Could not load session.");
-		} finally {
-			setLoading(false);
+			setAdminError(error instanceof Error ? error.message : "Could not load admin data.");
 		}
 	}, [loadSafety]);
 
 	useEffect(() => {
-		void refreshSession();
-	}, [refreshSession]);
+		if (userId) {
+			// Load protected admin data after Better Auth confirms a session.
+			// eslint-disable-next-line react-hooks/set-state-in-effect
+			void refreshAdminData();
+		}
+	}, [refreshAdminData, userId]);
 
 	async function updateSafety(updates: Record<string, boolean | number>) {
 		const response = await fetch("/api/admin/safety", {
 			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
+			headers: jsonBodyHeaders,
 			credentials: "include",
 			body: JSON.stringify(updates),
 		});
@@ -160,20 +161,23 @@ function App() {
 	}
 
 	async function handleSignOut() {
-		await fetch("/api/auth/sign-out", {
-			method: "POST",
-			credentials: "include",
-		});
-		setUser(null);
+		await authClient.signOut();
 		setSafety(null);
+		setAdminError(null);
+		await session.refetch();
 	}
 
-	if (loading) {
+	if (session.isPending) {
 		return <LoadingScreen />;
 	}
 
 	if (!user) {
-		return <AuthScreen error={authError} onAuthenticated={() => void refreshSession()} />;
+		return (
+			<AuthScreen
+				error={session.error?.message ?? null}
+				onAuthenticated={() => void session.refetch()}
+			/>
+		);
 	}
 
 	return (
@@ -215,6 +219,13 @@ function App() {
 					</header>
 
 					<main className="flex-1 space-y-6 p-4 lg:p-6">
+						{adminError ? (
+							<Alert variant="destructive">
+								<AlertTriangle className="h-4 w-4" />
+								<AlertTitle>Admin data error</AlertTitle>
+								<AlertDescription>{adminError}</AlertDescription>
+							</Alert>
+						) : null}
 						<OverviewCards safety={safety} />
 						<SafetyPanel safety={safety} onUpdate={(updates) => void updateSafety(updates)} />
 						<MonitoringPanel />
@@ -233,7 +244,9 @@ function AuthScreen(props: { error: string | null; onAuthenticated: () => void }
 
 		async function loadBootstrapStatus() {
 			try {
-				const response = await fetch("/api/admin/bootstrap");
+				const response = await fetch("/api/admin/bootstrap", {
+					headers: jsonHeaders,
+				});
 				if (!response.ok) {
 					throw new Error("Bootstrap status could not be loaded.");
 				}
@@ -311,14 +324,13 @@ function LoginCard(props: { onAuthenticated: () => void }) {
 		setFeedback(null);
 		setLoading(true);
 		try {
-			const response = await fetch("/api/auth/sign-in/email", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				credentials: "include",
-				body: JSON.stringify({ email, password, rememberMe: true }),
+			const { error } = await authClient.signIn.email({
+				email,
+				password,
+				rememberMe: true,
 			});
-			if (!response.ok) {
-				throw new Error("Invalid email or password.");
+			if (error) {
+				throw new Error(error.message ?? "Invalid email or password.");
 			}
 			props.onAuthenticated();
 		} catch (err) {
@@ -387,7 +399,7 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 		try {
 			const response = await fetch("/api/admin/bootstrap", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: jsonBodyHeaders,
 				body: JSON.stringify({ name, email, password, bootstrapToken: token }),
 			});
 			if (!response.ok) {

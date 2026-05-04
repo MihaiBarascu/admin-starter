@@ -31,6 +31,15 @@ describe("public API", () => {
 		expect(response.status).toBe(404);
 		await expect(readJson(response)).resolves.toEqual({ error: "Not found." });
 	});
+
+	it("returns null for missing auth sessions as JSON", async () => {
+		const response = await workerFetch("/api/auth/get-session", {
+			headers: { Accept: "*/*" },
+		});
+
+		expect(response.status).toBe(200);
+		await expect(readJson(response)).resolves.toBeNull();
+	});
 });
 
 describe("admin API", () => {
