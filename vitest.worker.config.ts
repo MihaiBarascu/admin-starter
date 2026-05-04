@@ -18,12 +18,14 @@ export default defineConfig({
 			return {
 				main: "./src/worker/index.ts",
 				wrangler: {
-					configPath: "./wrangler.json",
+					configPath: "./wrangler.jsonc",
 				},
 				miniflare: {
 					bindings: {
 						BETTER_AUTH_SECRET: "test-better-auth-secret-at-least-32-characters",
 						BOOTSTRAP_ADMIN_TOKEN: "test-bootstrap-token",
+						RESEND_API_KEY: "test-resend-api-key",
+						RESEND_FROM_EMAIL: "Multiwebsite Admin <no-reply@example.test>",
 						TEST_MIGRATIONS: migrations,
 					},
 				},

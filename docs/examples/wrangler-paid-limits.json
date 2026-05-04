@@ -1,6 +1,6 @@
 {
   "limits": {
-    "cpu_ms": 100,
-    "subrequests": 10
+    "cpu_ms": 1000,
+    "subrequests": 50
   }
 }

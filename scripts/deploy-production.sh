@@ -2,8 +2,9 @@
 set -euo pipefail
 
 echo "Production deploy checklist:"
-echo "- wrangler.json contains the production BETTER_AUTH_URL and AUTH_TRUSTED_ORIGINS."
-echo "- wrangler.json contains the production D1 database_name and database_id."
+echo "- wrangler.jsonc contains the production BETTER_AUTH_URL and AUTH_TRUSTED_ORIGINS."
+echo "- wrangler.jsonc contains the production D1 database_name and database_id."
+echo "- Resend sending domain is verified and RESEND_FROM_EMAIL matches that domain."
 echo "- Confirm manually that Cloudflare WAF/rate limiting and Budget Alerts are configured."
 echo "- Production secrets were submitted with scripts/setup-production-secrets.sh."
 echo
@@ -28,6 +29,14 @@ if (!names.has("BETTER_AUTH_SECRET")) {
 }
 
 console.log("- BETTER_AUTH_SECRET is configured.");
+
+if (!names.has("RESEND_API_KEY")) {
+	console.error("Missing required production secret RESEND_API_KEY.");
+	console.error("Run: npx wrangler secret put RESEND_API_KEY");
+	process.exit(1);
+}
+
+console.log("- RESEND_API_KEY is configured.");
 
 if (names.has("BOOTSTRAP_ADMIN_TOKEN")) {
 	console.log("- BOOTSTRAP_ADMIN_TOKEN is configured.");

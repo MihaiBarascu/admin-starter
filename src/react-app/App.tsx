@@ -113,6 +113,7 @@ const jsonBodyHeaders = {
 };
 
 function App() {
+	const resetPasswordToken = getResetPasswordToken();
 	const session = authClient.useSession();
 	const user = session.data?.user ?? null;
 	const userId = user?.id;
@@ -169,6 +170,10 @@ function App() {
 
 	if (session.isPending) {
 		return <LoadingScreen />;
+	}
+
+	if (resetPasswordToken !== null) {
+		return <ResetPasswordScreen token={resetPasswordToken} />;
 	}
 
 	if (!user) {
@@ -234,6 +239,14 @@ function App() {
 			</div>
 		</div>
 	);
+}
+
+function getResetPasswordToken(): string | null {
+	if (typeof window === "undefined" || window.location.pathname !== "/reset-password") {
+		return null;
+	}
+
+	return new URLSearchParams(window.location.search).get("token") ?? "";
 }
 
 function AuthScreen(props: { error: string | null; onAuthenticated: () => void }) {
@@ -314,6 +327,7 @@ export function AuthCardStack(props: {
 }
 
 function LoginCard(props: { onAuthenticated: () => void }) {
+	const [mode, setMode] = useState<"sign-in" | "forgot-password">("sign-in");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [feedback, setFeedback] = useState<FormFeedbackState>(null);
@@ -341,6 +355,75 @@ function LoginCard(props: { onAuthenticated: () => void }) {
 		} finally {
 			setLoading(false);
 		}
+	}
+
+	async function handlePasswordResetRequest(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setFeedback(null);
+		setLoading(true);
+		try {
+			const { error } = await authClient.requestPasswordReset({
+				email,
+				redirectTo: getPasswordResetRedirectUrl(),
+			});
+			if (error) {
+				throw new Error(error.message ?? "Password reset request failed.");
+			}
+			setFeedback({
+				type: "success",
+				message: "If that email exists, a reset link was sent.",
+			});
+		} catch (err) {
+			setFeedback({
+				type: "error",
+				message: err instanceof Error ? err.message : "Password reset request failed.",
+			});
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	if (mode === "forgot-password") {
+		return (
+			<Card>
+				<CardHeader>
+					<CardTitle>Reset password</CardTitle>
+					<CardDescription>Send a reset link to the admin email address.</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<form className="grid gap-4" onSubmit={handlePasswordResetRequest}>
+						<div className="grid gap-2">
+							<Label htmlFor="reset-email">Email</Label>
+							<Input
+								id="reset-email"
+								type="email"
+								autoComplete="email"
+								value={email}
+								onChange={(event) => setEmail(event.target.value)}
+								required
+							/>
+						</div>
+						<FormFeedback feedback={feedback} />
+						<div className="grid gap-2 sm:grid-cols-2">
+							<Button type="submit" disabled={loading}>
+								<Mail className="h-4 w-4" />
+								{loading ? "Sending..." : "Send reset link"}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => {
+									setFeedback(null);
+									setMode("sign-in");
+								}}
+							>
+								Sign in
+							</Button>
+						</div>
+					</form>
+				</CardContent>
+			</Card>
+		);
 	}
 
 	return (
@@ -378,10 +461,145 @@ function LoginCard(props: { onAuthenticated: () => void }) {
 						<LockKeyhole className="h-4 w-4" />
 						{loading ? "Signing in..." : "Sign in"}
 					</Button>
+					<Button
+						type="button"
+						variant="link"
+						className="h-auto justify-self-start p-0"
+						onClick={() => {
+							setFeedback(null);
+							setMode("forgot-password");
+						}}
+					>
+						Forgot password?
+					</Button>
 				</form>
 			</CardContent>
 		</Card>
 	);
+}
+
+function getPasswordResetRedirectUrl(): string {
+	if (typeof window === "undefined") {
+		return "/reset-password";
+	}
+
+	return `${window.location.origin}/reset-password`;
+}
+
+export function ResetPasswordScreen(props: { token: string }) {
+	const [password, setPassword] = useState("");
+	const [confirmPassword, setConfirmPassword] = useState("");
+	const [feedback, setFeedback] = useState<FormFeedbackState>(
+		props.token
+			? null
+			: {
+					type: "error",
+					message: "Invalid reset link.",
+				},
+	);
+	const [loading, setLoading] = useState(false);
+
+	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		setFeedback(null);
+
+		if (!props.token) {
+			setFeedback({ type: "error", message: "Invalid reset link." });
+			return;
+		}
+		if (password.length < 12 || password.length > 128) {
+			setFeedback({
+				type: "error",
+				message: "Password must contain between 12 and 128 characters.",
+			});
+			return;
+		}
+		if (password !== confirmPassword) {
+			setFeedback({ type: "error", message: "Passwords do not match." });
+			return;
+		}
+
+		setLoading(true);
+		try {
+			const { error } = await authClient.resetPassword({
+				newPassword: password,
+				token: props.token,
+			});
+			if (error) {
+				throw new Error(error.message ?? "Password reset failed.");
+			}
+			setPassword("");
+			setConfirmPassword("");
+			setFeedback({
+				type: "success",
+				message: "Password updated. You can sign in with the new password.",
+			});
+		} catch (err) {
+			setFeedback({
+				type: "error",
+				message: err instanceof Error ? err.message : "Password reset failed.",
+			});
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	return (
+		<div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+			<Card className="w-full max-w-md">
+				<CardHeader>
+					<CardTitle>Reset password</CardTitle>
+					<CardDescription>Choose a new password for the admin account.</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<form className="grid gap-4" onSubmit={handleSubmit}>
+						<div className="grid gap-2">
+							<Label htmlFor="new-password">New password</Label>
+							<Input
+								id="new-password"
+								type="password"
+								autoComplete="new-password"
+								value={password}
+								onChange={(event) => setPassword(event.target.value)}
+								minLength={12}
+								maxLength={128}
+								disabled={!props.token}
+								required
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="confirm-password">Confirm password</Label>
+							<Input
+								id="confirm-password"
+								type="password"
+								autoComplete="new-password"
+								value={confirmPassword}
+								onChange={(event) => setConfirmPassword(event.target.value)}
+								minLength={12}
+								maxLength={128}
+								disabled={!props.token}
+								required
+							/>
+						</div>
+						<FormFeedback feedback={feedback} />
+						<Button type="submit" disabled={!props.token || loading}>
+							<LockKeyhole className="h-4 w-4" />
+							{loading ? "Updating..." : "Update password"}
+						</Button>
+						<Button type="button" variant="outline" onClick={goToSignIn}>
+							Sign in
+						</Button>
+					</form>
+				</CardContent>
+			</Card>
+		</div>
+	);
+}
+
+function goToSignIn() {
+	if (typeof window !== "undefined") {
+		window.location.assign("/");
+	}
 }
 
 function BootstrapCard(props: { onBootstrapped: () => void }) {

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AuthCardStack } from "../../src/react-app/App";
+import { AuthCardStack, ResetPasswordScreen } from "../../src/react-app/App";
 
 describe("AuthCardStack", () => {
 	it("hides first-admin bootstrap when bootstrap is no longer available", () => {
@@ -19,5 +19,31 @@ describe("AuthCardStack", () => {
 
 		expect(markup).toContain("Sign in");
 		expect(markup).toContain("Bootstrap first admin");
+	});
+
+	it("offers password reset from the sign-in card", () => {
+		const markup = renderToStaticMarkup(
+			<AuthCardStack bootstrapAvailable={false} onAuthenticated={() => undefined} />,
+		);
+
+		expect(markup).toContain("Forgot password?");
+	});
+});
+
+describe("ResetPasswordScreen", () => {
+	it("renders the password reset form when a token is present", () => {
+		const markup = renderToStaticMarkup(<ResetPasswordScreen token="reset-token" />);
+
+		expect(markup).toContain("Reset password");
+		expect(markup).toContain("New password");
+		expect(markup).toContain("Confirm password");
+		expect(markup).toContain("Update password");
+	});
+
+	it("shows invalid link feedback without a token", () => {
+		const markup = renderToStaticMarkup(<ResetPasswordScreen token="" />);
+
+		expect(markup).toContain("Invalid reset link.");
+		expect(markup).toContain("disabled");
 	});
 });

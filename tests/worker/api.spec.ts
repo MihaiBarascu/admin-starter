@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { env } from "cloudflare:workers";
 import app from "../../src/worker";
+import { createAdminUser } from "../../src/worker/modules/admin-users/service";
+import type { AppBindings } from "../../src/worker/types";
 import { getSessionCookie, readJson, workerFetch } from "./helpers/http";
 
 const admin = {
@@ -8,6 +11,10 @@ const admin = {
 	password: "TestStrongPassword123!",
 	bootstrapToken: "test-bootstrap-token",
 };
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
 
 describe("public API", () => {
 	it("returns app metadata and health", async () => {
@@ -214,5 +221,56 @@ describe("admin API", () => {
 		await expect(readJson(invalidSafety)).resolves.toEqual({
 			error: "No valid safety settings were provided.",
 		});
+	});
+
+	it("sends password reset emails through the configured email provider", async () => {
+		const resetAdmin = {
+			...admin,
+			email: "reset-admin@example.com",
+		};
+		const emailRequests: Array<{ url: string; init?: RequestInit }> = [];
+		vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+			emailRequests.push({
+				url: input instanceof Request ? input.url : String(input),
+				init,
+			});
+
+			return Response.json({ id: "email_test_reset" });
+		});
+
+		await createAdminUser(env as unknown as AppBindings, resetAdmin);
+
+		const resetRequest = await workerFetch("/api/auth/request-password-reset", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: "http://localhost:5173",
+			},
+			body: JSON.stringify({
+				email: resetAdmin.email,
+				redirectTo: "http://localhost:5173/reset-password",
+			}),
+		});
+
+		expect(resetRequest.status).toBe(200);
+		await vi.waitFor(() => expect(emailRequests).toHaveLength(1));
+
+		const [emailRequest] = emailRequests;
+		expect(emailRequest.url).toBe("https://api.resend.com/emails");
+		expect(new Headers(emailRequest.init?.headers).get("authorization")).toBe(
+			"Bearer test-resend-api-key",
+		);
+
+		const body = JSON.parse(String(emailRequest.init?.body)) as {
+			from: string;
+			to: string[];
+			subject: string;
+			html: string;
+		};
+		expect(body.from).toBe("Multiwebsite Admin <no-reply@example.test>");
+		expect(body.to).toEqual([resetAdmin.email]);
+		expect(body.subject).toBe("Reset your Multiwebsite Admin Starter password");
+		expect(decodeURIComponent(body.html)).toContain("http://localhost:5173/reset-password");
+		expect(body.html).toContain("/api/auth/reset-password/");
 	});
 });

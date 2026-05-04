@@ -6,6 +6,8 @@ export interface AppBindings {
 	AUTH_SIGNUP_ENABLED?: string;
 	BOOTSTRAP_ADMIN_TOKEN?: string;
 	APP_NAME?: string;
+	RESEND_API_KEY?: string;
+	RESEND_FROM_EMAIL?: string;
 }
 
 export interface AppVariables {

@@ -26,7 +26,9 @@ app.route("/api/health", healthRoutes);
 
 app.use("/api/auth/*", requireTrustedOrigin);
 app.on(["POST", "GET"], "/api/auth/*", (c) => {
-	return createAuth(c.env).handler(c.req.raw);
+	return createAuth(c.env, {
+		waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),
+	}).handler(c.req.raw);
 });
 
 app.route("/api/admin/bootstrap", bootstrapRoutes);

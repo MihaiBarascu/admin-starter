@@ -24,6 +24,9 @@ This guide documents how the starter is built, how to run it, and which official
 - Better Auth email/password: https://better-auth.com/docs/authentication/email-password
 - Better Auth rate limit: https://better-auth.com/docs/concepts/rate-limit
 - Better Auth Drizzle adapter: https://better-auth.com/docs/adapters/drizzle
+- Resend Email API: https://resend.com/docs/api-reference/emails/send-email
+- Cloudflare Workers Resend tutorial: https://developers.cloudflare.com/workers/tutorials/send-emails-with-resend/
+- Resend Cloudflare Workers guide: https://resend.com/docs/send-with-cloudflare-workers
 - shadcn/ui Vite installation: https://ui.shadcn.com/docs/installation/vite
 - shadcn/ui components: https://ui.shadcn.com/docs/components
 - Cloudflare Workers testing: https://developers.cloudflare.com/workers/testing/
@@ -118,7 +121,7 @@ SEED_ADMIN_PASSWORD="LocalAdminPassword123!"
 ```
 
 Remote seeds act on the configured remote D1 database. Before running a remote
-seed, confirm the production `database_name` and `database_id` in `wrangler.json`,
+seed, confirm the production `database_name` and `database_id` in `wrangler.jsonc`,
 apply remote migrations, and verify that the seed email is intended for that
 environment.
 
@@ -126,12 +129,12 @@ environment.
 
 The project uses a simple deployment model:
 
-- `wrangler.json` is the production/deploy configuration.
+- `wrangler.jsonc` is the production/deploy configuration.
 - `.dev.vars` provides local secrets and localhost auth values while developing.
 - Local D1 commands use `--local`; remote D1 commands use `--remote`.
-- The default `wrangler.json` is compatible with Workers Free. Workers Paid
-  projects can copy optional limits from
-  `docs/examples/wrangler-paid-limits.json`.
+- The default `wrangler.jsonc` is compatible with Workers Free. Workers Paid
+  projects should uncomment the documented `limits` block in `wrangler.jsonc`
+  or copy the same values from `docs/examples/wrangler-paid-limits.json`.
 
 Create local secrets:
 
@@ -192,6 +195,7 @@ Current API coverage:
 - first-admin bootstrap
 - rejected auth mutation without a trusted Origin
 - Better Auth email/password sign-in
+- Better Auth password reset email through Resend
 - authenticated safety settings read/update
 - invalid safety payload rejection
 
@@ -227,6 +231,19 @@ only for the Better Auth CLI schema generator. The CLI config must stay free of
 real Cloudflare bindings and production secrets.
 
 Better Auth rate limiting is enabled with Cloudflare's `cf-connecting-ip` header and a stricter rule for `/sign-in/email`. This is a baseline auth protection. For production public endpoints, still configure Cloudflare WAF/rate limiting in front of the Worker.
+
+Password reset uses Better Auth's official `sendResetPassword` hook and client
+methods: `authClient.requestPasswordReset()` and `authClient.resetPassword()`.
+The hook sends the email through Resend's official `POST /emails` API from
+`src/worker/modules/email/service.ts`. The email send is passed to
+`ctx.waitUntil()` so the auth response does not wait on the email provider.
+
+Required email configuration:
+
+- `RESEND_API_KEY` is a Cloudflare secret.
+- `RESEND_FROM_EMAIL` is a Wrangler variable and must use a domain verified in
+  Resend.
+- Local development can define both values in `.dev.vars`.
 
 Unsafe `/api/auth/*` requests also require a trusted `Origin` header. This keeps browser-based auth mutations tied to the configured `AUTH_TRUSTED_ORIGINS` and avoids depending only on library defaults.
 
@@ -270,11 +287,17 @@ The admin dashboard includes external monitoring links for:
 
 These links are intentionally external. Cloudflare billing and product usage data can lag and should not be treated as a real-time kill switch.
 
-The Worker keeps observability enabled but samples logs and traces at 1% in `wrangler.json`. This preserves some operational visibility while reducing the chance that a traffic spike creates a secondary logs bill. Do not add `console.log` on every request. Log only exceptional or security-relevant events, and prefer structured JSON when logging is needed.
+The Worker keeps observability enabled but samples logs and traces at 1% in `wrangler.jsonc`. This preserves some operational visibility while reducing the chance that a traffic spike creates a secondary logs bill. Do not add `console.log` on every request. Log only exceptional or security-relevant events, and prefer structured JSON when logging is needed.
 
 ## Production Cost Controls
 
 Cloudflare Workers Paid does not impose a daily request cap, so cost control must combine Cloudflare edge rules, billing alerts, and code-level limits.
+When moving this starter to Workers Paid, start by enabling conservative Worker
+limits in `wrangler.jsonc`: `cpu_ms: 1000` and `subrequests: 50`. These keep
+runaway requests bounded while leaving enough room for Better Auth, D1, and the
+occasional Resend call. Do not add KV, R2, Queues, Durable Objects, Workers AI,
+Vectorize, Browser Rendering, or Analytics Engine bindings until the code has a
+clear need, product-specific limits, tests, and monitoring notes.
 
 Before production deploy, configure Cloudflare dashboard controls:
 
@@ -341,12 +364,12 @@ important deploy signals.
 ### Cloudflare resources
 
 1. Create a Cloudflare D1 database for the production project.
-2. Set the production D1 `database_name` and `database_id` in `wrangler.json`.
+2. Set the production D1 `database_name` and `database_id` in `wrangler.jsonc`.
 3. Set production `BETTER_AUTH_URL` to the final HTTPS origin.
 4. Set production `AUTH_TRUSTED_ORIGINS` to the exact allowed browser origins.
 5. Configure a custom domain for production traffic with `routes[].pattern` and
    `custom_domain: true`. The default `workers.dev` route and Preview URLs are
-   disabled in `wrangler.json`.
+   disabled in `wrangler.jsonc`.
 6. Keep `AUTH_SIGNUP_ENABLED=false` unless the project intentionally allows
    public signups.
 7. Set production secrets:
@@ -356,9 +379,13 @@ npm run secrets:production
 ```
 
 `BETTER_AUTH_SECRET` is permanent and required for every production deploy.
+`RESEND_API_KEY` is permanent and required for password reset emails.
 `BOOTSTRAP_ADMIN_TOKEN` is only needed while creating the first admin. After an
 admin exists, it can be rotated or deleted; when it is missing, the bootstrap UI
 is disabled.
+
+Before relying on password reset in production, verify the sending domain in
+Resend and make sure `RESEND_FROM_EMAIL` in `wrangler.jsonc` uses that domain.
 
 ### Cost controls
 

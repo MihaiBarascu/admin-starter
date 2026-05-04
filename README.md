@@ -24,7 +24,7 @@ The local app runs at `http://localhost:5173`.
 
 ## Configuration Model
 
-`wrangler.json` is the deploy configuration. For production, set the real
+`wrangler.jsonc` is the deploy configuration. For production, set the real
 `BETTER_AUTH_URL`, `AUTH_TRUSTED_ORIGINS`, `routes[].pattern`, D1
 `database_name`, and `database_id` there before connecting the repo to
 Cloudflare Builds.
@@ -32,7 +32,7 @@ Cloudflare Builds.
 Local development uses `.dev.vars` for local secrets and localhost auth values.
 Do not commit `.dev.vars`.
 
-The default `wrangler.json` is compatible with Workers Free. If a project moves
+The default `wrangler.jsonc` is compatible with Workers Free. If a project moves
 to Workers Paid, optional CPU/subrequest limits can be copied from
 `docs/examples/wrangler-paid-limits.json`.
 
@@ -44,7 +44,9 @@ Local secrets live in `.dev.vars`. Production secrets must be set with Wrangler.
 npm run secrets:production
 ```
 
-`BOOTSTRAP_ADMIN_TOKEN` is only needed to create the first admin user. Remove or rotate it after bootstrap.
+`BETTER_AUTH_SECRET` and `RESEND_API_KEY` are permanent production secrets.
+`BOOTSTRAP_ADMIN_TOKEN` is only needed to create the first admin user. Remove or
+rotate it after bootstrap.
 
 ## Database
 
@@ -109,10 +111,11 @@ npm run build
 ## Deploy
 
 1. Create a real D1 database.
-2. Set the production D1 `database_name` and `database_id` in `wrangler.json`.
-3. Set production secrets with `npm run secrets:production`.
-4. Run remote migrations.
-5. Deploy.
+2. Set the production D1 `database_name` and `database_id` in `wrangler.jsonc`.
+3. Verify the Resend sending domain and set `RESEND_FROM_EMAIL` in `wrangler.jsonc`.
+4. Set production secrets with `npm run secrets:production`.
+5. Run remote migrations.
+6. Deploy.
 
 ```bash
 npm run db:migrate:remote
@@ -127,7 +130,8 @@ npm run deploy:production
 
 The production deploy script runs tests, lint, build, remote migrations, and
 deploy. It also checks that the permanent `BETTER_AUTH_SECRET` exists in
-Cloudflare before deploying. `BOOTSTRAP_ADMIN_TOKEN` is intentionally optional
-after the first admin exists.
+Cloudflare before deploying. `RESEND_API_KEY` is required for forgot-password
+emails. `BOOTSTRAP_ADMIN_TOKEN` is intentionally optional after the first admin
+exists.
 
 Read [docs/admin-guide.md](docs/admin-guide.md) before deploying a project created from this starter.

@@ -1,0 +1,85 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "multiwebsite-admin-starter",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2025-10-08",
+
+  // Keep unintended public Worker URLs disabled. Production traffic should use
+  // the explicit custom domain below.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      // Replace this per project before production deploy.
+      "pattern": "admin-starter.multiwebsite.org",
+      "custom_domain": true
+    }
+  ],
+
+  // Required by current dependencies that rely on Node-compatible APIs.
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Cost-aware observability: keep visibility, but sample logs/traces at 1%.
+  // Do not raise sampling in production without checking Workers Logs costs.
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.01,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "upload_source_maps": true,
+
+  // Paid-plan guardrails. Keep commented on Workers Free; Cloudflare rejects
+  // configured CPU limits on the Free plan. When upgrading to Workers Paid,
+  // uncomment this block first, deploy, and only raise values after observing
+  // real CPU/subrequest usage.
+  //
+  // Recommended starter values for this app on Paid:
+  // - cpu_ms: 1000 keeps a runaway request from burning paid CPU. Cloudflare
+  //   Paid defaults to 30000 ms and can go up to 300000 ms, but this admin
+  //   starter should not need that unless we add heavy jobs.
+  // - subrequests: 50 keeps the Free-plan discipline. Paid defaults higher,
+  //   but our current request paths should only need D1 plus occasional Resend.
+  //
+  // "limits": {
+  //   "cpu_ms": 1000,
+  //   "subrequests": 50
+  // },
+
+  // React is built as static assets. API requests still run through the Worker.
+  "assets": {
+    "directory": "./dist/client",
+    "not_found_handling": "single-page-application"
+  },
+
+  // Non-secret runtime config only. Secrets must be set with Wrangler:
+  // npx wrangler secret put BETTER_AUTH_SECRET
+  // npx wrangler secret put RESEND_API_KEY
+  // BOOTSTRAP_ADMIN_TOKEN is optional after the first admin exists.
+  "vars": {
+    "BETTER_AUTH_URL": "https://admin-starter.multiwebsite.org",
+    "AUTH_TRUSTED_ORIGINS": "https://admin-starter.multiwebsite.org",
+    "AUTH_SIGNUP_ENABLED": "false",
+    "APP_NAME": "Multiwebsite Admin Starter",
+
+    // Must use a domain verified in Resend before production password reset.
+    "RESEND_FROM_EMAIL": "Multiwebsite Admin <no-reply@multiwebsite.org>"
+  },
+
+  // Replace database_id per project. migrations_dir is required by Wrangler D1
+  // so local, remote, and test migrations use the same generated SQL files.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "multiwebsite-admin-starter",
+      "database_id": "8bc28ac4-57fd-4f70-a43b-63d76e2707f0",
+      "migrations_dir": "./drizzle/migrations"
+    }
+  ]
+}

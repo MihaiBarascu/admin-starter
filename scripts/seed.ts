@@ -63,7 +63,7 @@ async function main() {
 	const seedName = readSeedName();
 	const getPlatformProxy = loadGetPlatformProxy();
 	const platform = await getPlatformProxy({
-		configPath: "./wrangler.json",
+		configPath: "./wrangler.jsonc",
 		remoteBindings: target === "remote",
 	});
 

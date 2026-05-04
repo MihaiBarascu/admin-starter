@@ -4,9 +4,13 @@ import { getDb } from "./db/client";
 import { schema } from "./db/schema";
 import { isEnabled, parseCsv } from "./lib/env";
 import { authBaseOptions } from "./auth/options";
+import { sendPasswordResetEmail } from "./modules/email/service";
 import type { AppBindings } from "./types";
 
-export function createAuth(env: AppBindings, options?: { allowSignUp?: boolean }) {
+export function createAuth(
+	env: AppBindings,
+	options?: { allowSignUp?: boolean; waitUntil?: (promise: Promise<unknown>) => void },
+) {
 	if (!env.BETTER_AUTH_SECRET) {
 		throw new Error("Missing BETTER_AUTH_SECRET.");
 	}
@@ -28,6 +32,23 @@ export function createAuth(env: AppBindings, options?: { allowSignUp?: boolean }
 		emailAndPassword: {
 			...authBaseOptions.emailAndPassword,
 			disableSignUp: !signUpEnabled,
+			sendResetPassword: async ({ user, url }) => {
+				const sendEmail = sendPasswordResetEmail(env, {
+					to: user.email,
+					resetUrl: url,
+				}).catch((error: unknown) => {
+					console.error(
+						"Password reset email failed",
+						error instanceof Error ? error.message : error,
+					);
+				});
+
+				if (options?.waitUntil) {
+					options.waitUntil(sendEmail);
+				} else {
+					void sendEmail;
+				}
+			},
 		},
 		advanced: {
 			...authBaseOptions.advanced,
