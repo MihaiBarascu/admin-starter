@@ -231,23 +231,7 @@ function App() {
 	return (
 		<div className="min-h-screen bg-muted/40">
 			<div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
-				<aside className="hidden border-r bg-background lg:block">
-					<div className="flex h-14 items-center gap-2 border-b px-5">
-						<div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-							<LayoutDashboard className="h-4 w-4" />
-						</div>
-						<div>
-							<p className="text-sm font-semibold">Multiwebsite Admin</p>
-							<p className="text-xs text-muted-foreground">Cloudflare starter</p>
-						</div>
-					</div>
-					<nav className="grid gap-1 p-3">
-						<Button variant="secondary" className="justify-start" aria-current="page">
-							<LayoutDashboard className="h-4 w-4" />
-							Dashboard
-						</Button>
-					</nav>
-				</aside>
+				<AdminSidebar />
 
 				<div className="flex min-w-0 flex-col">
 					<header className="flex h-14 items-center justify-between border-b bg-background px-4 lg:px-6">
@@ -258,7 +242,7 @@ function App() {
 						<UserMenu user={user} onSignOut={() => void handleSignOut()} />
 					</header>
 
-					<main className="flex-1 space-y-6 p-4 lg:p-6">
+					<main id="dashboard" className="flex-1 space-y-6 p-4 lg:p-6">
 						{adminError ? (
 							<Alert variant="destructive">
 								<AlertTriangle className="h-4 w-4" />
@@ -283,6 +267,42 @@ function getResetPasswordToken(): string | null {
 	}
 
 	return new URLSearchParams(window.location.search).get("token") ?? "";
+}
+
+export function AdminSidebar() {
+	return (
+		<aside className="hidden border-r bg-background lg:block">
+			<div className="flex h-14 items-center gap-2 border-b px-5">
+				<div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+					<LayoutDashboard className="h-4 w-4" />
+				</div>
+				<div>
+					<p className="text-sm font-semibold">Multiwebsite Admin</p>
+					<p className="text-xs text-muted-foreground">Cloudflare starter</p>
+				</div>
+			</div>
+			<nav className="grid gap-1 p-3">
+				<Button asChild variant="secondary" className="justify-start">
+					<a href="#dashboard" aria-current="page">
+						<LayoutDashboard className="h-4 w-4" />
+						Dashboard
+					</a>
+				</Button>
+				<Button asChild variant="ghost" className="justify-start">
+					<a href="#forms">
+						<FileText className="h-4 w-4" />
+						Forms
+					</a>
+				</Button>
+				<Button asChild variant="ghost" className="justify-start">
+					<a href="#monitoring">
+						<Activity className="h-4 w-4" />
+						Monitoring
+					</a>
+				</Button>
+			</nav>
+		</aside>
+	);
 }
 
 function AuthScreen(props: { error: string | null; onAuthenticated: () => void }) {
@@ -870,7 +890,7 @@ function SafetySwitch(props: {
 
 export function FormsPanel(props: { forms: AdminForm[] }) {
 	return (
-		<Card>
+		<Card id="forms">
 			<CardHeader>
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
@@ -942,7 +962,7 @@ export function FormsPanel(props: { forms: AdminForm[] }) {
 
 function MonitoringPanel() {
 	return (
-		<Card>
+		<Card id="monitoring">
 			<CardHeader>
 				<CardTitle>Monitoring Links</CardTitle>
 				<CardDescription>Cloudflare and provider dashboards for live usage review.</CardDescription>

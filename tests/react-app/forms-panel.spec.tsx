@@ -1,6 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { FormsPanel } from "../../src/react-app/App";
+import { AdminSidebar, FormsPanel } from "../../src/react-app/App";
+
+describe("AdminSidebar", () => {
+	it("links to the dashboard forms and monitoring sections", () => {
+		const markup = renderToStaticMarkup(<AdminSidebar />);
+
+		expect(markup).toContain('href="#dashboard"');
+		expect(markup).toContain('href="#forms"');
+		expect(markup).toContain('href="#monitoring"');
+		expect(markup).toContain("Forms");
+	});
+});
 
 describe("FormsPanel", () => {
 	it("renders dynamic forms from the admin API response", () => {
