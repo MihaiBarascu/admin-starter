@@ -588,7 +588,7 @@ export function ResetPasswordScreen(props: { token: string }) {
 							<LockKeyhole className="h-4 w-4" />
 							{loading ? "Updating..." : "Update password"}
 						</Button>
-						<Button type="button" variant="outline" onClick={goToSignIn}>
+						<Button type="button" variant="outline" onClick={() => goToSignIn()}>
 							Sign in
 						</Button>
 					</form>
