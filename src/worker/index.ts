@@ -14,6 +14,7 @@ const app = new Hono<AppEnv>();
 
 app.use("*", secureHeaders());
 app.use("/api/*", apiBodyLimit);
+app.use("/api/*", requireTrustedOrigin);
 
 app.get("/api/", (c) => {
 	return c.json({
@@ -24,7 +25,6 @@ app.get("/api/", (c) => {
 
 app.route("/api/health", healthRoutes);
 
-app.use("/api/auth/*", requireTrustedOrigin);
 app.on(["POST", "GET"], "/api/auth/*", (c) => {
 	return createAuth(c.env, {
 		waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),

@@ -11,6 +11,7 @@ const admin = {
 	password: "TestStrongPassword123!",
 	bootstrapToken: "test-bootstrap-token",
 };
+const trustedOrigin = "http://localhost:5173";
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -94,21 +95,28 @@ describe("admin API", () => {
 
 		const missingBootstrapToken = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", Origin: trustedOrigin },
 			body: JSON.stringify({ ...admin, bootstrapToken: "" }),
 		});
 		expect(missingBootstrapToken.status).toBe(400);
 
-		const invalidBootstrap = await workerFetch("/api/admin/bootstrap", {
+		const missingBootstrapOrigin = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ ...admin, bootstrapToken: "" }),
+		});
+		expect(missingBootstrapOrigin.status).toBe(403);
+
+		const invalidBootstrap = await workerFetch("/api/admin/bootstrap", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: trustedOrigin },
 			body: JSON.stringify({ ...admin, bootstrapToken: "wrong-token" }),
 		});
 		expect(invalidBootstrap.status).toBe(401);
 
 		const invalidEmail = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", Origin: trustedOrigin },
 			body: JSON.stringify({ ...admin, email: "not-an-email" }),
 		});
 		expect(invalidEmail.status).toBe(400);
@@ -118,7 +126,7 @@ describe("admin API", () => {
 
 		const bootstrap = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", Origin: trustedOrigin },
 			body: JSON.stringify(admin),
 		});
 		expect(bootstrap.status).toBe(201);
@@ -132,7 +140,7 @@ describe("admin API", () => {
 
 		const duplicateBootstrap = await workerFetch("/api/admin/bootstrap", {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", Origin: trustedOrigin },
 			body: JSON.stringify(admin),
 		});
 		expect(duplicateBootstrap.status).toBe(409);
@@ -152,7 +160,7 @@ describe("admin API", () => {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				Origin: "http://localhost:5173",
+				Origin: trustedOrigin,
 			},
 			body: JSON.stringify({
 				email: admin.email,
@@ -162,6 +170,21 @@ describe("admin API", () => {
 		});
 		expect(signIn.status).toBe(200);
 		const cookie = getSessionCookie(signIn);
+
+		const me = await workerFetch("/api/admin/me", {
+			headers: { Cookie: cookie },
+		});
+		expect(me.status).toBe(200);
+		const mePayload = await readJson(me);
+		expect(mePayload).toMatchObject({
+			user: {
+				email: admin.email,
+			},
+			session: {
+				userId: expect.any(String),
+			},
+		});
+		expect(mePayload).not.toHaveProperty("session.token");
 
 		const initialSafety = await workerFetch("/api/admin/safety", {
 			headers: { Cookie: cookie },
@@ -181,11 +204,22 @@ describe("admin API", () => {
 			},
 		});
 
+		const updateSafetyWithoutOrigin = await workerFetch("/api/admin/safety", {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: cookie,
+			},
+			body: JSON.stringify({ unknown: true }),
+		});
+		expect(updateSafetyWithoutOrigin.status).toBe(403);
+
 		const updateSafety = await workerFetch("/api/admin/safety", {
 			method: "PATCH",
 			headers: {
 				"Content-Type": "application/json",
 				Cookie: cookie,
+				Origin: trustedOrigin,
 			},
 			body: JSON.stringify({
 				publicApiEnabled: false,
@@ -214,6 +248,7 @@ describe("admin API", () => {
 			headers: {
 				"Content-Type": "application/json",
 				Cookie: cookie,
+				Origin: trustedOrigin,
 			},
 			body: JSON.stringify({ unknown: true }),
 		});
