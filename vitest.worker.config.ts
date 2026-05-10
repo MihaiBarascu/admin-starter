@@ -22,7 +22,11 @@ export default defineConfig({
 				},
 				miniflare: {
 					bindings: {
+						APP_NAME: "Multiwebsite Admin Starter",
 						BETTER_AUTH_SECRET: "test-better-auth-secret-at-least-32-characters",
+						BETTER_AUTH_URL: "http://localhost:5173",
+						AUTH_TRUSTED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173",
+						AUTH_SIGNUP_ENABLED: "false",
 						BOOTSTRAP_ADMIN_TOKEN: "test-bootstrap-token",
 						RESEND_API_KEY: "test-resend-api-key",
 						RESEND_FROM_EMAIL: "Multiwebsite Admin <no-reply@example.test>",
