@@ -1,15 +1,26 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AdminSidebar, FormsPanel } from "../../src/react-app/App";
+import { getAdminPageFromPath } from "../../src/react-app/lib/admin-routing";
 
 describe("AdminSidebar", () => {
-	it("links to the dashboard forms and monitoring sections", () => {
+	it("links to the dashboard and forms pages", () => {
 		const markup = renderToStaticMarkup(<AdminSidebar />);
 
-		expect(markup).toContain('href="#dashboard"');
-		expect(markup).toContain('href="#forms"');
-		expect(markup).toContain('href="#monitoring"');
+		expect(markup).toContain('href="/"');
+		expect(markup).toContain('href="/forms"');
 		expect(markup).toContain("Forms");
+		expect(markup).not.toContain('href="#forms"');
+		expect(markup).not.toContain("Monitoring</a>");
+	});
+});
+
+describe("getAdminPageFromPath", () => {
+	it("routes only forms to its own admin page", () => {
+		expect(getAdminPageFromPath("/")).toBe("dashboard");
+		expect(getAdminPageFromPath("/forms")).toBe("forms");
+		expect(getAdminPageFromPath("/forms/")).toBe("forms");
+		expect(getAdminPageFromPath("/unknown")).toBe("dashboard");
 	});
 });
 

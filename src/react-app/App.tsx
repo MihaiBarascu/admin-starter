@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Activity,
@@ -48,6 +48,11 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { authClient, type AuthSession } from "./lib/auth-client";
+import {
+	adminPagePaths,
+	getCurrentAdminPage,
+	type AdminPage,
+} from "./lib/admin-routing";
 import { goToSignIn, redirectToSignInAfterPasswordReset } from "./lib/navigation";
 
 type AdminUser = AuthSession["user"];
@@ -149,6 +154,16 @@ function App() {
 	const [safety, setSafety] = useState<SafetyResponse | null>(null);
 	const [forms, setForms] = useState<AdminForm[]>([]);
 	const [adminError, setAdminError] = useState<string | null>(null);
+	const [adminPage, setAdminPage] = useState<AdminPage>(getCurrentAdminPage);
+
+	useEffect(() => {
+		function handlePopState() {
+			setAdminPage(getCurrentAdminPage());
+		}
+
+		window.addEventListener("popstate", handlePopState);
+		return () => window.removeEventListener("popstate", handlePopState);
+	}, []);
 
 	const loadSafety = useCallback(async () => {
 		const response = await fetch("/api/admin/safety", {
@@ -211,6 +226,15 @@ function App() {
 		await session.refetch();
 	}
 
+	function navigateAdminPage(page: AdminPage) {
+		const path = adminPagePaths[page];
+		if (window.location.pathname !== path) {
+			window.history.pushState(null, "", path);
+		}
+		setAdminPage(page);
+		window.scrollTo({ top: 0 });
+	}
+
 	if (session.isPending) {
 		return <LoadingScreen />;
 	}
@@ -231,18 +255,24 @@ function App() {
 	return (
 		<div className="min-h-screen bg-muted/40">
 			<div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
-				<AdminSidebar />
+				<AdminSidebar activePage={adminPage} onNavigate={navigateAdminPage} />
 
 				<div className="flex min-w-0 flex-col">
 					<header className="flex h-14 items-center justify-between border-b bg-background px-4 lg:px-6">
 						<div>
-							<p className="text-sm font-medium">Admin Starter</p>
-							<p className="text-xs text-muted-foreground">D1 + Drizzle + Better Auth</p>
+							<p className="text-sm font-medium">
+								{adminPage === "forms" ? "Forms" : "Admin Starter"}
+							</p>
+							<p className="text-xs text-muted-foreground">
+								{adminPage === "forms"
+									? "Public form endpoints"
+									: "D1 + Drizzle + Better Auth"}
+							</p>
 						</div>
 						<UserMenu user={user} onSignOut={() => void handleSignOut()} />
 					</header>
 
-					<main id="dashboard" className="flex-1 space-y-6 p-4 lg:p-6">
+					<main className="flex-1 space-y-6 p-4 lg:p-6">
 						{adminError ? (
 							<Alert variant="destructive">
 								<AlertTriangle className="h-4 w-4" />
@@ -250,10 +280,15 @@ function App() {
 								<AlertDescription>{adminError}</AlertDescription>
 							</Alert>
 						) : null}
-						<OverviewCards safety={safety} />
-						<SafetyPanel safety={safety} onUpdate={(updates) => void updateSafety(updates)} />
-						<FormsPanel forms={forms} />
-						<MonitoringPanel />
+						{adminPage === "forms" ? (
+							<FormsPanel forms={forms} />
+						) : (
+							<>
+								<OverviewCards safety={safety} />
+								<SafetyPanel safety={safety} onUpdate={(updates) => void updateSafety(updates)} />
+								<MonitoringPanel />
+							</>
+						)}
 					</main>
 				</div>
 			</div>
@@ -269,7 +304,21 @@ function getResetPasswordToken(): string | null {
 	return new URLSearchParams(window.location.search).get("token") ?? "";
 }
 
-export function AdminSidebar() {
+export function AdminSidebar(props: {
+	activePage?: AdminPage;
+	onNavigate?: (page: AdminPage) => void;
+}) {
+	const activePage = props.activePage ?? "dashboard";
+
+	function handleNavigation(event: MouseEvent<HTMLAnchorElement>, page: AdminPage) {
+		if (!props.onNavigate) {
+			return;
+		}
+
+		event.preventDefault();
+		props.onNavigate(page);
+	}
+
 	return (
 		<aside className="hidden border-r bg-background lg:block">
 			<div className="flex h-14 items-center gap-2 border-b px-5">
@@ -282,22 +331,32 @@ export function AdminSidebar() {
 				</div>
 			</div>
 			<nav className="grid gap-1 p-3">
-				<Button asChild variant="secondary" className="justify-start">
-					<a href="#dashboard" aria-current="page">
+				<Button
+					asChild
+					variant={activePage === "dashboard" ? "secondary" : "ghost"}
+					className="justify-start"
+				>
+					<a
+						href={adminPagePaths.dashboard}
+						aria-current={activePage === "dashboard" ? "page" : undefined}
+						onClick={(event) => handleNavigation(event, "dashboard")}
+					>
 						<LayoutDashboard className="h-4 w-4" />
 						Dashboard
 					</a>
 				</Button>
-				<Button asChild variant="ghost" className="justify-start">
-					<a href="#forms">
+				<Button
+					asChild
+					variant={activePage === "forms" ? "secondary" : "ghost"}
+					className="justify-start"
+				>
+					<a
+						href={adminPagePaths.forms}
+						aria-current={activePage === "forms" ? "page" : undefined}
+						onClick={(event) => handleNavigation(event, "forms")}
+					>
 						<FileText className="h-4 w-4" />
 						Forms
-					</a>
-				</Button>
-				<Button asChild variant="ghost" className="justify-start">
-					<a href="#monitoring">
-						<Activity className="h-4 w-4" />
-						Monitoring
 					</a>
 				</Button>
 			</nav>
@@ -890,7 +949,7 @@ function SafetySwitch(props: {
 
 export function FormsPanel(props: { forms: AdminForm[] }) {
 	return (
-		<Card id="forms">
+		<Card>
 			<CardHeader>
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<div>
@@ -962,7 +1021,7 @@ export function FormsPanel(props: { forms: AdminForm[] }) {
 
 function MonitoringPanel() {
 	return (
-		<Card id="monitoring">
+		<Card>
 			<CardHeader>
 				<CardTitle>Monitoring Links</CardTitle>
 				<CardDescription>Cloudflare and provider dashboards for live usage review.</CardDescription>
