@@ -272,5 +272,34 @@ describe("admin API", () => {
 		expect(body.subject).toBe("Reset your Multiwebsite Admin Starter password");
 		expect(decodeURIComponent(body.html)).toContain("http://localhost:5173/reset-password");
 		expect(body.html).toContain("/api/auth/reset-password/");
+
+		const token = body.html.match(/\/api\/auth\/reset-password\/([^?"]+)/)?.[1];
+		expect(token).toBeTruthy();
+
+		const resetPassword = await workerFetch("/api/auth/reset-password", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: "http://localhost:5173",
+			},
+			body: JSON.stringify({
+				newPassword: "NewResetPassword123!",
+				token,
+			}),
+		});
+		expect(resetPassword.status).toBe(200);
+
+		const signIn = await workerFetch("/api/auth/sign-in/email", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: "http://localhost:5173",
+			},
+			body: JSON.stringify({
+				email: resetAdmin.email,
+				password: "NewResetPassword123!",
+			}),
+		});
+		expect(signIn.status).toBe(200);
 	});
 });
