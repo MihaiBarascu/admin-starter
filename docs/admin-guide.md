@@ -482,6 +482,16 @@ in order, and checks that `BETTER_AUTH_SECRET` exists in Cloudflare:
 npm run deploy:production
 ```
 
+For Cloudflare Workers Builds connected to GitHub, set the dashboard deploy
+command to:
+
+```bash
+npm run deploy:cloudflare
+```
+
+That script applies remote D1 migrations first, then deploys the Worker. Keep the
+dashboard build command as `npm run build`.
+
 3. Create the first admin from the bootstrap UI or by intentionally running the
    remote admin seed:
 
