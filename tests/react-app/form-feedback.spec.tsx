@@ -8,14 +8,14 @@ describe("FormFeedback", () => {
 			<FormFeedback
 				feedback={{
 					type: "error",
-					message: "Password must contain between 12 and 128 characters.",
+					message: "Password must contain between 8 and 128 characters.",
 				}}
 			/>,
 		);
 
 		expect(markup).toContain('role="alert"');
 		expect(markup).toContain("text-destructive");
-		expect(markup).toContain("Password must contain between 12 and 128 characters.");
+		expect(markup).toContain("Password must contain between 8 and 128 characters.");
 	});
 
 	it("renders success feedback without destructive styling", () => {

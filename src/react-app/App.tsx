@@ -507,10 +507,10 @@ export function ResetPasswordScreen(props: { token: string }) {
 			setFeedback({ type: "error", message: "Invalid reset link." });
 			return;
 		}
-		if (password.length < 12 || password.length > 128) {
+		if (password.length < 8 || password.length > 128) {
 			setFeedback({
 				type: "error",
-				message: "Password must contain between 12 and 128 characters.",
+				message: "Password must contain between 8 and 128 characters.",
 			});
 			return;
 		}
@@ -561,7 +561,7 @@ export function ResetPasswordScreen(props: { token: string }) {
 								autoComplete="new-password"
 								value={password}
 								onChange={(event) => setPassword(event.target.value)}
-								minLength={12}
+								minLength={8}
 								maxLength={128}
 								disabled={!props.token}
 								required
@@ -575,7 +575,7 @@ export function ResetPasswordScreen(props: { token: string }) {
 								autoComplete="new-password"
 								value={confirmPassword}
 								onChange={(event) => setConfirmPassword(event.target.value)}
-								minLength={12}
+								minLength={8}
 								maxLength={128}
 								disabled={!props.token}
 								required
@@ -679,7 +679,7 @@ function BootstrapCard(props: { onBootstrapped: () => void }) {
 								autoComplete="new-password"
 								value={password}
 								onChange={(event) => setPassword(event.target.value)}
-								minLength={12}
+								minLength={8}
 								maxLength={128}
 								required
 							/>

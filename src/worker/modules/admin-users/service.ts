@@ -5,7 +5,7 @@ import { user } from "../../db/auth-schema.generated";
 import { getDb } from "../../db/client";
 import type { AppBindings } from "../../types";
 
-const PASSWORD_LENGTH_ERROR = "Password must contain between 12 and 128 characters.";
+const PASSWORD_LENGTH_ERROR = "Password must contain between 8 and 128 characters.";
 
 export const adminUserSchema = z.object({
 	name: z.string().trim().min(1, "Admin name is required."),
@@ -15,7 +15,7 @@ export const adminUserSchema = z.object({
 		.min(1, "Admin email is required.")
 		.toLowerCase()
 		.pipe(z.email("Admin email is invalid.")),
-	password: z.string().min(12, PASSWORD_LENGTH_ERROR).max(128, PASSWORD_LENGTH_ERROR),
+	password: z.string().min(8, PASSWORD_LENGTH_ERROR).max(128, PASSWORD_LENGTH_ERROR),
 });
 
 export type AdminUserInput = z.input<typeof adminUserSchema>;

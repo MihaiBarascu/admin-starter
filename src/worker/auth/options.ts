@@ -1,7 +1,7 @@
 import type { BetterAuthOptions } from "better-auth";
 import { hashPassword, verifyPassword } from "./password";
 
-export const AUTH_PASSWORD_MIN_LENGTH = 12;
+export const AUTH_PASSWORD_MIN_LENGTH = 8;
 export const AUTH_PASSWORD_MAX_LENGTH = 128;
 
 export const authBaseOptions = {
