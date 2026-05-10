@@ -1,6 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AdminSidebar, FormsPanel } from "../../src/react-app/App";
+import { AdminSidebar } from "../../src/react-app/App";
+import { FormsPanel } from "../../src/react-app/forms-admin";
+import {
+	createEmptyFormDraft,
+	draftToUpsertRequest,
+	formToDraft,
+} from "../../src/react-app/lib/forms-admin-model";
 import { getAdminPageFromPath } from "../../src/react-app/lib/admin-routing";
 
 describe("AdminSidebar", () => {
@@ -49,6 +55,8 @@ describe("FormsPanel", () => {
 
 		expect(markup).toContain("Forms");
 		expect(markup).toContain("1 configured");
+		expect(markup).toContain("New form");
+		expect(markup).toContain("Edit");
 		expect(markup).toContain("Contact");
 		expect(markup).toContain("/api/forms/contact/submissions");
 		expect(markup).toContain("email, message");
@@ -59,6 +67,92 @@ describe("FormsPanel", () => {
 		const markup = renderToStaticMarkup(<FormsPanel forms={[]} />);
 
 		expect(markup).toContain("0 configured");
-		expect(markup).toContain("Run the forms seed from GitHub Actions");
+		expect(markup).toContain("Create the first form from this page or run the forms seed");
+		expect(markup).toContain("New form");
+	});
+
+	it("creates a usable empty form draft", () => {
+		const draft = createEmptyFormDraft();
+
+		expect(draft.slug).toBe("");
+		expect(draft.enabled).toBe(true);
+		expect(draft.fields).toEqual([
+			{
+				name: "email",
+				label: "Email",
+				type: "email",
+				required: true,
+				maxLength: 254,
+			},
+		]);
+	});
+
+	it("maps saved forms to editable drafts", () => {
+		const draft = formToDraft({
+			id: "form_contact",
+			name: "Contact",
+			slug: "contact",
+			enabled: false,
+			notificationEmail: " Owner@Example.COM ",
+			turnstileRequired: true,
+			schema: {
+				fields: [
+					{ name: "email", type: "email", required: true, maxLength: 254 },
+					{ name: "message", label: "Message", type: "textarea", required: true },
+				],
+			},
+		});
+
+		expect(draft).toMatchObject({
+			slug: "contact",
+			name: "Contact",
+			enabled: false,
+			notificationEmail: " Owner@Example.COM ",
+			turnstileRequired: true,
+			fields: [
+				{ name: "email", label: "Email", type: "email", required: true, maxLength: 254 },
+				{ name: "message", label: "Message", type: "textarea", required: true },
+			],
+		});
+	});
+
+	it("normalizes drafts for the admin upsert API", () => {
+		const payload = draftToUpsertRequest({
+			slug: " Contact ",
+			name: " Contact form ",
+			enabled: true,
+			notificationEmail: " Owner@Example.COM ",
+			turnstileRequired: false,
+			fields: [
+				{
+					name: " email ",
+					label: " Email address ",
+					type: "email",
+					required: true,
+					maxLength: 254,
+				},
+			],
+		});
+
+		expect(payload).toEqual({
+			slug: "contact",
+			request: {
+				name: "Contact form",
+				enabled: true,
+				notificationEmail: "owner@example.com",
+				turnstileRequired: false,
+				schema: {
+					fields: [
+						{
+							name: "email",
+							label: "Email address",
+							type: "email",
+							required: true,
+							maxLength: 254,
+						},
+					],
+				},
+			},
+		});
 	});
 });
