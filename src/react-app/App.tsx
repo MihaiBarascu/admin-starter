@@ -200,17 +200,9 @@ function App() {
 						</div>
 					</div>
 					<nav className="grid gap-1 p-3">
-						<Button variant="secondary" className="justify-start">
+						<Button variant="secondary" className="justify-start" aria-current="page">
 							<LayoutDashboard className="h-4 w-4" />
 							Dashboard
-						</Button>
-						<Button variant="ghost" className="justify-start">
-							<Shield className="h-4 w-4" />
-							Safety
-						</Button>
-						<Button variant="ghost" className="justify-start">
-							<Activity className="h-4 w-4" />
-							Monitoring
 						</Button>
 					</nav>
 				</aside>

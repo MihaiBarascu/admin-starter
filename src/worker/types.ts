@@ -8,6 +8,7 @@ export interface AppBindings {
 	APP_NAME?: string;
 	RESEND_API_KEY?: string;
 	RESEND_FROM_EMAIL?: string;
+	TURNSTILE_SECRET_KEY?: string;
 }
 
 export interface AppVariables {

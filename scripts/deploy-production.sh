@@ -5,6 +5,7 @@ echo "Production deploy checklist:"
 echo "- wrangler.jsonc contains the production BETTER_AUTH_URL and AUTH_TRUSTED_ORIGINS."
 echo "- wrangler.jsonc contains the production D1 database_name and database_id."
 echo "- Resend sending domain is verified and RESEND_FROM_EMAIL matches that domain."
+echo "- TURNSTILE_SECRET_KEY is set if any public form has turnstileRequired=true."
 echo "- Confirm manually that Cloudflare WAF/rate limiting and Budget Alerts are configured."
 echo "- Production secrets were submitted with scripts/setup-production-secrets.sh."
 echo

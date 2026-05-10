@@ -4,6 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { createAuth } from "./auth";
 import { requireAdminSession } from "./auth/middleware";
 import { bootstrapRoutes } from "./modules/bootstrap/routes";
+import { adminFormsRoutes, formsRoutes } from "./modules/forms/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { meRoutes } from "./modules/me/routes";
 import { safetyRoutes } from "./modules/safety/routes";
@@ -24,6 +25,7 @@ app.get("/api/", (c) => {
 });
 
 app.route("/api/health", healthRoutes);
+app.route("/api/forms", formsRoutes);
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => {
 	return createAuth(c.env, {
@@ -33,6 +35,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 
 app.route("/api/admin/bootstrap", bootstrapRoutes);
 app.use("/api/admin/*", requireAdminSession);
+app.route("/api/admin/forms", adminFormsRoutes);
 app.route("/api/admin/me", meRoutes);
 app.route("/api/admin/safety", safetyRoutes);
 

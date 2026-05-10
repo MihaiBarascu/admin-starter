@@ -26,6 +26,7 @@ export default defineConfig({
 						BOOTSTRAP_ADMIN_TOKEN: "test-bootstrap-token",
 						RESEND_API_KEY: "test-resend-api-key",
 						RESEND_FROM_EMAIL: "Multiwebsite Admin <no-reply@example.test>",
+						TURNSTILE_SECRET_KEY: "test-turnstile-secret",
 						TEST_MIGRATIONS: migrations,
 					},
 				},

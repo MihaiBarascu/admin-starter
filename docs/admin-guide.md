@@ -33,6 +33,7 @@ This guide documents how the starter is built, how to run it, and which official
 - Cloudflare Vitest integration: https://developers.cloudflare.com/workers/testing/vitest-integration/
 - Cloudflare WAF rate limiting best practices: https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/
 - Cloudflare Budget Alerts: https://developers.cloudflare.com/billing/manage/budget-alerts/
+- Cloudflare Turnstile server-side validation: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
 - Cloudflare Workers Logs pricing: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
 - Hono body limit middleware: https://hono.dev/docs/middleware/builtin/body-limit
 - Vitest guide: https://vitest.dev/guide/
@@ -58,6 +59,9 @@ src/worker/
     security.ts
   modules/
     bootstrap/routes.ts
+    forms/routes.ts
+    forms/schema.ts
+    forms/service.ts
     health/routes.ts
     me/routes.ts
     safety/defaults.ts
@@ -198,6 +202,10 @@ Current API coverage:
 - Better Auth password reset email through Resend
 - authenticated safety settings read/update
 - invalid safety payload rejection
+- same-origin public form submissions
+- form schema allowlist validation
+- form safety checks before D1 writes, Turnstile validation, and Resend email
+- Turnstile server-side validation for forms that require it
 
 For every new API route, add tests for:
 
@@ -261,6 +269,53 @@ The starter includes runtime safety switches:
 The current starter stores only changed values in D1. Defaults live in `src/worker/modules/safety/defaults.ts`.
 
 Future public write endpoints should check the safety module before doing expensive work such as Turnstile validation, D1 writes, R2 writes, Queues publishes, or third-party API calls.
+
+## Forms API
+
+The starter includes a same-origin public form ingestion API:
+
+```text
+POST /api/forms/:slug/submissions
+```
+
+Forms are configured by an authenticated admin route:
+
+```text
+PUT /api/admin/forms/:slug
+```
+
+Each form stores a server-side field allowlist in D1. Public submissions are
+accepted only when the request `Origin` is trusted by `AUTH_TRUSTED_ORIGINS`,
+the form is enabled, the global public API safety switch is enabled, emergency
+stop is off, and the daily public write limit has not been reached.
+
+The submission payload shape is:
+
+```json
+{
+  "payload": {
+    "email": "visitor@example.com",
+    "message": "Hello"
+  },
+  "turnstileToken": "optional-token"
+}
+```
+
+The form schema decides which fields are accepted. Unknown fields are rejected
+instead of stored. Supported field types are `text`, `email`, `textarea`, and
+`checkbox`.
+
+If a form has `turnstileRequired=true`, the Worker validates the token on the
+server through Cloudflare Turnstile Siteverify before writing the submission.
+Set the production secret before enabling that option:
+
+```bash
+npx wrangler secret put TURNSTILE_SECRET_KEY
+```
+
+After a successful D1 write, the Worker sends the Resend notification with
+`ctx.waitUntil()`. This keeps the user-facing response fast and avoids losing
+the stored submission if the email provider is temporarily unavailable.
 
 ## UI Rules
 
@@ -327,9 +382,9 @@ Suggested threshold: 5 requests / 10 minutes / IP
 ```text
 Rule: Future public write endpoints
 Expression:
-(http.request.uri.path wildcard "/api/public/*" and http.request.method in {"POST" "PUT" "PATCH" "DELETE"})
+(http.request.uri.path wildcard "/api/forms/*" and http.request.method eq "POST")
 Suggested action: Managed Challenge or Block after threshold
-Suggested threshold: depends on endpoint cost and expected traffic
+Suggested threshold: start around 20 requests / 10 minutes / IP, then tune from real traffic
 ```
 
 For production, prefer a custom domain protected by Cloudflare WAF and keep `workers.dev` exposure disabled once routes/domains are configured. Do not add R2, KV, Queues, Durable Objects, Workers AI, Vectorize, Browser Rendering, or Analytics Engine without adding product-specific limits, tests, and monitoring notes.
@@ -380,6 +435,8 @@ npm run secrets:production
 
 `BETTER_AUTH_SECRET` is permanent and required for every production deploy.
 `RESEND_API_KEY` is permanent and required for password reset emails.
+`TURNSTILE_SECRET_KEY` is required only for forms configured with
+`turnstileRequired=true`.
 `BOOTSTRAP_ADMIN_TOKEN` is only needed while creating the first admin. After an
 admin exists, it can be rotated or deleted; when it is missing, the bootstrap UI
 is disabled.
