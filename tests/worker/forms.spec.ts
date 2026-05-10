@@ -154,6 +154,54 @@ describe("forms API", () => {
 		expect(emailBody.html).toContain("Hello from the frontend");
 	});
 
+	it("lists configured forms for authenticated admins", async () => {
+		const cookie = await createSignedInAdmin();
+		await upsertContactForm(cookie, "contact");
+		await upsertContactForm(cookie, "newsletter", {
+			name: "Newsletter",
+			notificationEmail: "newsletter@example.test",
+			schema: {
+				fields: [
+					{
+						name: "email",
+						type: "email",
+						required: true,
+						maxLength: 254,
+					},
+				],
+			},
+		});
+
+		const response = await workerFetch("/api/admin/forms", {
+			headers: { Cookie: cookie },
+		});
+
+		expect(response.status).toBe(200);
+		await expect(readJson(response)).resolves.toMatchObject({
+			forms: [
+				{
+					name: "Contact",
+					slug: "contact",
+					notificationEmail: "owner@example.test",
+					schema: {
+						fields: [
+							{ name: "email", type: "email" },
+							{ name: "message", type: "textarea" },
+						],
+					},
+				},
+				{
+					name: "Newsletter",
+					slug: "newsletter",
+					notificationEmail: "newsletter@example.test",
+					schema: {
+						fields: [{ name: "email", type: "email" }],
+					},
+				},
+			],
+		});
+	});
+
 	it("rejects submissions without a trusted same-origin request", async () => {
 		const cookie = await createSignedInAdmin();
 		const slug = `origin-${crypto.randomUUID()}`;

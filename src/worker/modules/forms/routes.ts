@@ -4,6 +4,7 @@ import type { AppEnv } from "../../types";
 import {
 	createFormSubmission,
 	FormsServiceError,
+	listForms,
 	upsertForm,
 } from "./service";
 import {
@@ -16,6 +17,10 @@ export const formsRoutes = new Hono<AppEnv>();
 export const adminFormsRoutes = new Hono<AppEnv>();
 
 type FormsErrorStatus = 400 | 404 | 429 | 502 | 503;
+
+adminFormsRoutes.get("/", async (c) => {
+	return c.json({ forms: await listForms(c.env.DB) });
+});
 
 adminFormsRoutes.put(
 	"/:slug",

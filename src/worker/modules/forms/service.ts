@@ -1,4 +1,4 @@
-import { count, eq, gte } from "drizzle-orm";
+import { asc, count, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import { form, formSubmission } from "../../db/app-schema";
 import { getDb } from "../../db/client";
@@ -87,6 +87,12 @@ export async function upsertForm(
 	}
 
 	return toFormDto(row);
+}
+
+export async function listForms(dbBinding: D1Database): Promise<FormDto[]> {
+	const db = getDb({ DB: dbBinding });
+	const rows = await db.select().from(form).orderBy(asc(form.slug));
+	return rows.map(toFormDto);
 }
 
 export async function createFormSubmission(

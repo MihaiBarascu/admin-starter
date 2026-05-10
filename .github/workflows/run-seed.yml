@@ -1,0 +1,60 @@
+name: Run Seed
+
+on:
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Seed to run
+        required: true
+        default: forms
+        type: choice
+        options:
+          - forms
+          - admin
+      target:
+        description: Database target
+        required: true
+        default: remote
+        type: choice
+        options:
+          - remote
+          - local
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seed-${{ github.event.inputs.target }}-${{ github.event.inputs.seed }}
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: Run ${{ github.event.inputs.seed }} seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run seed
+        run: npm run db:seed:${{ github.event.inputs.target }} -- ${{ github.event.inputs.seed }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SEED_ADMIN_NAME: ${{ vars.SEED_ADMIN_NAME }}
+          SEED_ADMIN_EMAIL: ${{ vars.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          SEED_FORMS_NOTIFICATION_EMAIL: ${{ vars.SEED_FORMS_NOTIFICATION_EMAIL }}

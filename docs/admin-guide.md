@@ -110,6 +110,8 @@ proxy and application services, so seed logic stays close to the runtime code.
 ```bash
 npm run db:seed:local -- admin
 npm run db:seed:remote -- admin
+npm run db:seed:local -- forms
+npm run db:seed:remote -- forms
 ```
 
 The admin seed calls the application service in
@@ -118,18 +120,27 @@ when that email is missing. If the email already exists, the seed is a no-op and
 does not update the name or password. This keeps seed behavior predictable and
 avoids silently changing an existing account.
 
+The forms seed creates default `contact` and `newsletter` forms only when those
+slugs are missing. It never updates existing forms, so client-configured forms
+are not overwritten by later seed runs.
+
 Local defaults can be overridden in `.dev.vars`:
 
 ```text
 SEED_ADMIN_NAME="Local Admin"
 SEED_ADMIN_EMAIL="admin@example.test"
 SEED_ADMIN_PASSWORD="LocalAdminPassword123!"
+SEED_FORMS_NOTIFICATION_EMAIL="admin@example.test"
 ```
 
 Remote seeds act on the configured remote D1 database. Before running a remote
 seed, confirm the production `database_name` and `database_id` in `wrangler.jsonc`,
 apply remote migrations, and verify that the seed email is intended for that
 environment.
+
+GitHub Actions includes a manual `Run Seed` workflow. Open `Actions -> Run Seed`,
+choose `forms` or `admin`, choose `remote`, and run it intentionally. The seed
+workflow is not part of normal deploys.
 
 ## Local Development
 

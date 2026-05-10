@@ -8,6 +8,7 @@ import {
 	CheckCircle2,
 	Database,
 	ExternalLink,
+	FileText,
 	Gauge,
 	LayoutDashboard,
 	LockKeyhole,
@@ -38,6 +39,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { authClient, type AuthSession } from "./lib/auth-client";
 import { goToSignIn, redirectToSignInAfterPasswordReset } from "./lib/navigation";
 
@@ -49,6 +58,25 @@ interface SafetyResponse {
 		publicApiEnabled: boolean;
 		emailNotificationsEnabled: boolean;
 		emergencyStopEnabled: boolean;
+	};
+}
+
+interface AdminFormField {
+	name: string;
+	type: "text" | "email" | "textarea" | "checkbox";
+	required?: boolean;
+	maxLength?: number;
+}
+
+interface AdminForm {
+	id: string;
+	slug: string;
+	name: string;
+	enabled: boolean;
+	notificationEmail?: string;
+	turnstileRequired: boolean;
+	schema: {
+		fields: AdminFormField[];
 	};
 }
 
@@ -119,6 +147,7 @@ function App() {
 	const user = session.data?.user ?? null;
 	const userId = user?.id;
 	const [safety, setSafety] = useState<SafetyResponse | null>(null);
+	const [forms, setForms] = useState<AdminForm[]>([]);
 	const [adminError, setAdminError] = useState<string | null>(null);
 
 	const loadSafety = useCallback(async () => {
@@ -132,14 +161,26 @@ function App() {
 		setSafety((await response.json()) as SafetyResponse);
 	}, []);
 
+	const loadForms = useCallback(async () => {
+		const response = await fetch("/api/admin/forms", {
+			headers: jsonHeaders,
+			credentials: "include",
+		});
+		if (!response.ok) {
+			throw new Error("Forms could not be loaded.");
+		}
+		const payload = (await response.json()) as { forms: AdminForm[] };
+		setForms(payload.forms);
+	}, []);
+
 	const refreshAdminData = useCallback(async () => {
 		try {
-			await loadSafety();
+			await Promise.all([loadSafety(), loadForms()]);
 			setAdminError(null);
 		} catch (error) {
 			setAdminError(error instanceof Error ? error.message : "Could not load admin data.");
 		}
-	}, [loadSafety]);
+	}, [loadForms, loadSafety]);
 
 	useEffect(() => {
 		if (userId) {
@@ -165,6 +206,7 @@ function App() {
 	async function handleSignOut() {
 		await authClient.signOut();
 		setSafety(null);
+		setForms([]);
 		setAdminError(null);
 		await session.refetch();
 	}
@@ -226,6 +268,7 @@ function App() {
 						) : null}
 						<OverviewCards safety={safety} />
 						<SafetyPanel safety={safety} onUpdate={(updates) => void updateSafety(updates)} />
+						<FormsPanel forms={forms} />
 						<MonitoringPanel />
 					</main>
 				</div>
@@ -822,6 +865,78 @@ function SafetySwitch(props: {
 			<Label className="text-sm font-medium">{props.label}</Label>
 			<Switch checked={props.checked} onCheckedChange={props.onCheckedChange} />
 		</div>
+	);
+}
+
+export function FormsPanel(props: { forms: AdminForm[] }) {
+	return (
+		<Card>
+			<CardHeader>
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<CardTitle>Forms</CardTitle>
+						<CardDescription>Dynamic forms stored in D1 and submitted through the public API.</CardDescription>
+					</div>
+					<Badge variant="secondary">{props.forms.length} configured</Badge>
+				</div>
+			</CardHeader>
+			<CardContent>
+				{props.forms.length === 0 ? (
+					<div className="flex min-h-28 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+						Run the forms seed from GitHub Actions or create a form through the API.
+					</div>
+				) : (
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Endpoint</TableHead>
+								<TableHead>Fields</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Notification</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{props.forms.map((form) => (
+								<TableRow key={form.id}>
+									<TableCell className="font-medium">
+										<span className="inline-flex items-center gap-2">
+											<FileText className="h-4 w-4 text-muted-foreground" />
+											{form.name}
+										</span>
+									</TableCell>
+									<TableCell>
+										<code className="rounded bg-muted px-2 py-1 text-xs">
+											/api/forms/{form.slug}/submissions
+										</code>
+									</TableCell>
+									<TableCell>
+										<span className="text-sm text-muted-foreground">
+											{form.schema.fields.map((field) => field.name).join(", ")}
+										</span>
+									</TableCell>
+									<TableCell>
+										<div className="flex gap-2">
+											<Badge variant={form.enabled ? "secondary" : "destructive"}>
+												{form.enabled ? "Enabled" : "Paused"}
+											</Badge>
+											{form.turnstileRequired ? (
+												<Badge variant="outline">Turnstile</Badge>
+											) : null}
+										</div>
+									</TableCell>
+									<TableCell>
+										<span className="text-sm text-muted-foreground">
+											{form.notificationEmail ?? "Not set"}
+										</span>
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
+				)}
+			</CardContent>
+		</Card>
 	);
 }
 
