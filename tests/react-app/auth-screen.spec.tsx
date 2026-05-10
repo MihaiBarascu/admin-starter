@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AuthCardStack, ResetPasswordScreen } from "../../src/react-app/App";
+import { redirectToSignInAfterPasswordReset } from "../../src/react-app/lib/navigation";
 
 describe("AuthCardStack", () => {
 	it("hides first-admin bootstrap when bootstrap is no longer available", () => {
@@ -45,5 +46,26 @@ describe("ResetPasswordScreen", () => {
 
 		expect(markup).toContain("Invalid reset link.");
 		expect(markup).toContain("disabled");
+	});
+
+	it("redirects to sign in by replacing the reset URL after a successful password reset", () => {
+		const replace = vi.fn();
+		const assign = vi.fn();
+		const originalWindow = globalThis.window;
+		vi.stubGlobal("window", {
+			location: {
+				assign,
+				replace,
+			},
+		});
+
+		try {
+			redirectToSignInAfterPasswordReset();
+
+			expect(replace).toHaveBeenCalledWith("/");
+			expect(assign).not.toHaveBeenCalled();
+		} finally {
+			vi.stubGlobal("window", originalWindow);
+		}
 	});
 });

@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { authClient, type AuthSession } from "./lib/auth-client";
+import { goToSignIn, redirectToSignInAfterPasswordReset } from "./lib/navigation";
 
 type AdminUser = AuthSession["user"];
 
@@ -534,6 +535,7 @@ export function ResetPasswordScreen(props: { token: string }) {
 				type: "success",
 				message: "Password updated. You can sign in with the new password.",
 			});
+			redirectToSignInAfterPasswordReset();
 		} catch (err) {
 			setFeedback({
 				type: "error",
@@ -594,12 +596,6 @@ export function ResetPasswordScreen(props: { token: string }) {
 			</Card>
 		</div>
 	);
-}
-
-function goToSignIn() {
-	if (typeof window !== "undefined") {
-		window.location.assign("/");
-	}
 }
 
 function BootstrapCard(props: { onBootstrapped: () => void }) {
