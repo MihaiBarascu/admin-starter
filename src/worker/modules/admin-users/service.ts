@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { createAuth } from "../../auth";
+import { adminProfile } from "../../db/app-schema";
 import { user } from "../../db/auth-schema.generated";
 import { getDb } from "../../db/client";
 import type { AppBindings } from "../../types";
@@ -50,6 +51,36 @@ export async function findUserByEmail(env: Pick<AppBindings, "DB">, email: strin
 	return existingUser ?? null;
 }
 
+export async function isAdminUser(dbBinding: D1Database, userId: string): Promise<boolean> {
+	const db = getDb({ DB: dbBinding });
+	const existing = await db
+		.select({ userId: adminProfile.userId })
+		.from(adminProfile)
+		.where(eq(adminProfile.userId, userId))
+		.limit(1);
+	return existing.length > 0;
+}
+
+export async function ensureAdminProfile(dbBinding: D1Database, userId: string): Promise<void> {
+	const db = getDb({ DB: dbBinding });
+	const now = new Date();
+	await db
+		.insert(adminProfile)
+		.values({
+			userId,
+			role: "admin",
+			createdAt: now,
+			updatedAt: now,
+		})
+		.onConflictDoUpdate({
+			target: adminProfile.userId,
+			set: {
+				role: "admin",
+				updatedAt: now,
+			},
+		});
+}
+
 export async function createAdminUser(env: AdminUserEnv, input: AdminUserInput): Promise<AdminUserResult> {
 	return createValidatedAdminUser(env, adminUserSchema.parse(input));
 }
@@ -62,6 +93,7 @@ async function createValidatedAdminUser(env: AdminUserEnv, adminUser: AdminUser)
 			password: adminUser.password,
 		},
 	});
+	await ensureAdminProfile(env.DB, result.user.id);
 
 	return {
 		email: adminUser.email,
@@ -79,6 +111,7 @@ export async function ensureSeedAdmin(
 	const existingUser = await findUserByEmail(env, seed.email);
 
 	if (existingUser) {
+		await ensureAdminProfile(env.DB, existingUser.id);
 		return {
 			email: seed.email,
 			userId: existingUser.id,

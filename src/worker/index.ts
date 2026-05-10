@@ -13,7 +13,30 @@ import type { AppEnv } from "./types";
 
 const app = new Hono<AppEnv>();
 
-app.use("*", secureHeaders());
+app.use(
+	"*",
+	secureHeaders({
+		contentSecurityPolicy: {
+			defaultSrc: ["'self'"],
+			baseUri: ["'self'"],
+			objectSrc: ["'none'"],
+			frameAncestors: ["'none'"],
+			scriptSrc: ["'self'"],
+			styleSrc: ["'self'", "'unsafe-inline'"],
+			imgSrc: ["'self'", "data:"],
+			fontSrc: ["'self'"],
+			connectSrc: ["'self'"],
+			formAction: ["'self'"],
+		},
+		permissionsPolicy: {
+			camera: false,
+			microphone: false,
+			geolocation: false,
+			payment: false,
+		},
+		xFrameOptions: "DENY",
+	}),
+);
 app.use("/api/*", apiBodyLimit);
 app.use("/api/*", requireTrustedOrigin);
 

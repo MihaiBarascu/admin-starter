@@ -1,9 +1,19 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { user } from "./auth-schema.generated";
 
 export const appSetting = sqliteTable("app_setting", {
 	key: text("key").primaryKey(),
 	value: text("value").notNull(),
 	updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const adminProfile = sqliteTable("admin_profile", {
+	userId: text("user_id")
+		.primaryKey()
+		.references(() => user.id, { onDelete: "cascade" }),
+	role: text("role").default("admin").notNull(),
+	createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+	updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
 export const form = sqliteTable("form", {

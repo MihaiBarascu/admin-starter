@@ -22,6 +22,13 @@
       "when": 1778411480728,
       "tag": "0002_bitter_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1778433290730,
+      "tag": "0003_yielding_exiles",
+      "breakpoints": true
     }
   ]
 }

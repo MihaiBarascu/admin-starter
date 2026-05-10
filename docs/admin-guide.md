@@ -79,6 +79,8 @@ Better Auth-owned tables are generated from the official Better Auth CLI into
 `src/worker/db/auth-schema.generated.ts`. Do not edit that file manually.
 
 Application-owned tables live in `src/worker/db/app-schema.ts`.
+The `admin_profile` table is owned by this starter and marks which Better Auth
+users are allowed to access `/api/admin/*`.
 
 `src/worker/db/schema.ts` combines both schemas and is the file Drizzle uses for
 migration generation.
@@ -211,6 +213,8 @@ Current API coverage:
 - missing/invalid bootstrap token rejection
 - first-admin bootstrap
 - rejected auth mutation without a trusted Origin
+- rejected authenticated non-admin users
+- Content Security Policy headers on Worker responses
 - Better Auth email/password sign-in
 - Better Auth password reset email through Resend
 - authenticated safety settings read/update
@@ -244,7 +248,12 @@ Better Auth is mounted according to the official Hono integration:
 GET/POST /api/auth/*
 ```
 
-Admin API routes are protected by `requireAdminSession`, which calls Better Auth's `getSession` with request headers and stores `user` and `session` in Hono context variables.
+Admin API routes are protected by `requireAdminSession`, which calls Better Auth's `getSession` with request headers and then requires a matching row in `admin_profile`. A valid Better Auth session alone is not enough to access `/api/admin/*`.
+
+Bootstrap and admin seeds create the Better Auth user and the matching
+`admin_profile` row. Migration `0003_yielding_exiles` backfills existing users
+as admins to preserve the starter's previous single-admin behavior during
+upgrade.
 
 The runtime auth configuration lives in `src/worker/auth.ts`. Shared Better Auth
 options live in `src/worker/auth/options.ts`, and `better-auth.config.ts` exists
@@ -269,6 +278,17 @@ Required email configuration:
 Unsafe `/api/auth/*` requests also require a trusted `Origin` header. This keeps browser-based auth mutations tied to the configured `AUTH_TRUSTED_ORIGINS` and avoids depending only on library defaults.
 
 All `/api/*` requests are capped at 32 KB by Hono's body limit middleware. The current admin/auth JSON payloads are small, so larger bodies are treated as abuse or misconfiguration and return `413`.
+
+## Security Headers
+
+Static React assets are protected by `public/_headers`. Worker/API responses are
+protected by Hono's `secureHeaders()` middleware in `src/worker/index.ts`.
+
+The current policy denies framing, blocks plugins/objects, restricts scripts,
+fonts, images, form submissions, and API connections to the same origin, and
+keeps inline styles allowed because the current Vite/Tailwind/shadcn build needs
+them. Revisit the policy before adding third-party scripts, analytics, external
+images, or API origins.
 
 ## Safety Module
 

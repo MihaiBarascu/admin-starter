@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:workers";
 import app from "../../src/worker";
+import { createAuth } from "../../src/worker/auth";
 import { createAdminUser } from "../../src/worker/modules/admin-users/service";
 import type { AppBindings } from "../../src/worker/types";
 import { getSessionCookie, readJson, workerFetch } from "./helpers/http";
@@ -21,6 +22,7 @@ describe("public API", () => {
 	it("returns app metadata and health", async () => {
 		const root = await workerFetch("/api/");
 		expect(root.status).toBe(200);
+		expect(root.headers.get("content-security-policy")).toContain("default-src 'self'");
 		await expect(readJson(root)).resolves.toMatchObject({
 			name: "Multiwebsite Admin Starter",
 			runtime: "Cloudflare Workers",
@@ -256,6 +258,37 @@ describe("admin API", () => {
 		await expect(readJson(invalidSafety)).resolves.toEqual({
 			error: "No valid safety settings were provided.",
 		});
+	});
+
+	it("rejects authenticated users that are not admins", async () => {
+		const nonAdmin = {
+			name: "Regular User",
+			email: `regular-${crypto.randomUUID()}@example.com`,
+			password: "RegularUserPassword123!",
+		};
+		await createAuth(env as unknown as AppBindings, { allowSignUp: true }).api.signUpEmail({
+			body: nonAdmin,
+		});
+
+		const signIn = await workerFetch("/api/auth/sign-in/email", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: trustedOrigin,
+			},
+			body: JSON.stringify({
+				email: nonAdmin.email,
+				password: nonAdmin.password,
+			}),
+		});
+		expect(signIn.status).toBe(200);
+
+		const response = await workerFetch("/api/admin/safety", {
+			headers: { Cookie: getSessionCookie(signIn) },
+		});
+
+		expect(response.status).toBe(403);
+		await expect(readJson(response)).resolves.toEqual({ error: "Forbidden." });
 	});
 
 	it("sends password reset emails through the configured email provider", async () => {
