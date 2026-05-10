@@ -71,7 +71,6 @@
     "db:seed:local": "tsx scripts/seed.ts --target local",
     "db:seed:remote": "tsx scripts/seed.ts --target remote",
     "deploy": "wrangler deploy",
-    "deploy:cloudflare": "npm run db:migrate:remote && npm run deploy",
     "deploy:production": "./scripts/deploy-production.sh",
     "dev": "vite",
     "fix": "eslint . --fix",

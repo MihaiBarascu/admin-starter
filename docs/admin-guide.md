@@ -31,6 +31,8 @@ This guide documents how the starter is built, how to run it, and which official
 - shadcn/ui components: https://ui.shadcn.com/docs/components
 - Cloudflare Workers testing: https://developers.cloudflare.com/workers/testing/
 - Cloudflare Vitest integration: https://developers.cloudflare.com/workers/testing/vitest-integration/
+- Cloudflare Workers GitHub Actions: https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/
+- Cloudflare Workers Builds configuration: https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
 - Cloudflare WAF rate limiting best practices: https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/
 - Cloudflare Budget Alerts: https://developers.cloudflare.com/billing/manage/budget-alerts/
 - Cloudflare Turnstile server-side validation: https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
@@ -463,6 +465,45 @@ credential stuffing, and bot traffic.
 
 ### Deploy
 
+The recommended production path is GitHub Actions. The workflow in
+`.github/workflows/deploy.yml` runs:
+
+1. `npm ci`
+2. `npm run test:api`
+3. `npm run test:react`
+4. `npm run lint`
+5. `npm run build`
+6. `wrangler d1 migrations apply ... --remote`
+7. `wrangler deploy`
+
+Configure these GitHub repository secrets:
+
+```text
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
+```
+
+The API token must be scoped to the production Cloudflare account and must allow
+Workers deploys and D1 migrations. In GitHub, use the `production` environment
+for the deploy job so approvals can be added later without changing the
+workflow.
+
+Do not leave Cloudflare Workers Builds doing production deploys at the same
+time as GitHub Actions. Use one deploy system for production. If this repository
+is connected in Cloudflare Workers Builds, disable production deploys there or
+leave it only for non-production preview experiments.
+
+For manual deploys from a trusted local machine, use:
+
+```bash
+npm run deploy:production
+```
+
+That guided command runs verification, remote migrations, and deploy in order,
+and checks that `BETTER_AUTH_SECRET` exists in Cloudflare.
+
+The lower-level manual commands are:
+
 1. Apply remote migrations:
 
 ```bash
@@ -474,23 +515,6 @@ npm run db:migrate:remote
 ```bash
 npm run deploy
 ```
-
-For a guided manual deploy that runs verification, remote migrations, and deploy
-in order, and checks that `BETTER_AUTH_SECRET` exists in Cloudflare:
-
-```bash
-npm run deploy:production
-```
-
-For Cloudflare Workers Builds connected to GitHub, set the dashboard deploy
-command to:
-
-```bash
-npm run deploy:cloudflare
-```
-
-That script applies remote D1 migrations first, then deploys the Worker. Keep the
-dashboard build command as `npm run build`.
 
 3. Create the first admin from the bootstrap UI or by intentionally running the
    remote admin seed:
