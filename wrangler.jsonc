@@ -53,9 +53,12 @@
   // },
 
   // React is built as static assets. API requests still run through the Worker.
+  // Only /api/* should invoke Worker code; client-side routes like
+  // /reset-password should fall through to the SPA asset handler.
   "assets": {
     "directory": "./dist/client",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   },
 
   // Non-secret runtime config only. Secrets must be set with Wrangler:
