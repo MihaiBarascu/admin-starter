@@ -2,6 +2,10 @@
 
 Cloudflare Workers starter for reusable admin applications.
 
+The forms API works with any website or web app that submits from the browser:
+static sites, server-rendered apps or CMS-based sites. Each form has its own
+allowed origins, field validation and optional Turnstile check.
+
 In production it is the form backend for several static websites
 ([Serenident](https://stomatolog.multiwebsite.org),
 [Alcov Imobiliare](https://imobiliare.multiwebsite.org),
