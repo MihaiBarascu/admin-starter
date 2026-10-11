@@ -28,6 +28,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	Table,
 	TableBody,
@@ -57,6 +58,8 @@ const fieldTypeOptions: Array<{ value: AdminFormFieldType; label: string }> = [
 	{ value: "text", label: "Text" },
 	{ value: "email", label: "Email" },
 	{ value: "textarea", label: "Textarea" },
+	{ value: "tel", label: "Phone" },
+	{ value: "select", label: "Select" },
 	{ value: "checkbox", label: "Checkbox" },
 ];
 
@@ -129,11 +132,12 @@ export function FormsPanel(props: FormsPanelProps) {
 						</div>
 					) : (
 						<div className="overflow-x-auto">
-							<Table className="min-w-[860px]">
+							<Table className="min-w-[1040px]">
 								<TableHeader>
 									<TableRow>
 										<TableHead>Name</TableHead>
 										<TableHead>Endpoint</TableHead>
+										<TableHead>Allowed origins</TableHead>
 										<TableHead>Fields</TableHead>
 										<TableHead>Status</TableHead>
 										<TableHead>Notification</TableHead>
@@ -153,6 +157,21 @@ export function FormsPanel(props: FormsPanelProps) {
 												<code className="rounded bg-muted px-2 py-1 text-xs">
 													/api/forms/{form.slug}/submissions
 												</code>
+											</TableCell>
+											<TableCell>
+												{form.allowedOrigins && form.allowedOrigins.length > 0 ? (
+													<div className="grid gap-1">
+														{form.allowedOrigins.map((origin) => (
+															<span key={origin} className="text-xs text-muted-foreground">
+																{origin}
+															</span>
+														))}
+													</div>
+												) : (
+													<span className="text-sm text-muted-foreground">
+														Admin origin only
+													</span>
+												)}
 											</TableCell>
 											<TableCell>
 												<span className="text-sm text-muted-foreground">
@@ -313,6 +332,21 @@ function FormEditorDialog(props: {
 									}
 								/>
 							</div>
+							<div className="grid gap-2 md:col-span-2">
+								<Label htmlFor="form-allowed-origins">Allowed origins</Label>
+								<Textarea
+									id="form-allowed-origins"
+									rows={3}
+									placeholder={"https://www.example.com\nhttp://localhost:4321"}
+									value={draft.allowedOrigins}
+									onChange={(event) => updateDraft({ allowedOrigins: event.target.value })}
+								/>
+								<p className="text-xs text-muted-foreground">
+									One exact origin per line (scheme and host, no path). Sites on these
+									origins may post to this form from the browser. The admin app origin
+									is always allowed.
+								</p>
+							</div>
 						</div>
 
 						<div className="grid gap-3 rounded-md border p-3">
@@ -428,6 +462,24 @@ function FormEditorDialog(props: {
 												/>
 											</div>
 										</div>
+
+										{field.type === "select" ? (
+											<div className="grid gap-2">
+												<Label htmlFor={`field-options-${index}`}>Options</Label>
+												<Textarea
+													id={`field-options-${index}`}
+													rows={3}
+													placeholder={"Option A\nOption B"}
+													value={(field.options ?? []).join("\n")}
+													onChange={(event) =>
+														updateField(index, { options: event.target.value.split("\n") })
+													}
+												/>
+												<p className="text-xs text-muted-foreground">
+													One option per line. Submitted values must match an option exactly.
+												</p>
+											</div>
+										) : null}
 									</div>
 								))}
 							</div>

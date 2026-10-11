@@ -1,4 +1,4 @@
-export type AdminFormFieldType = "text" | "email" | "textarea" | "checkbox";
+export type AdminFormFieldType = "text" | "email" | "textarea" | "checkbox" | "tel" | "select";
 
 export interface AdminFormField {
 	name: string;
@@ -6,6 +6,8 @@ export interface AdminFormField {
 	label?: string;
 	required?: boolean;
 	maxLength?: number;
+	/** Allowed values; only used by `select` fields. */
+	options?: string[];
 }
 
 export interface AdminForm {
@@ -15,6 +17,7 @@ export interface AdminForm {
 	enabled: boolean;
 	notificationEmail?: string;
 	turnstileRequired: boolean;
+	allowedOrigins?: string[];
 	schema: {
 		fields: AdminFormField[];
 	};
@@ -25,6 +28,7 @@ export interface UpsertAdminFormRequest {
 	enabled: boolean;
 	notificationEmail?: string;
 	turnstileRequired: boolean;
+	allowedOrigins: string[];
 	schema: {
 		fields: AdminFormField[];
 	};
@@ -36,6 +40,8 @@ export interface FormDraft {
 	enabled: boolean;
 	notificationEmail: string;
 	turnstileRequired: boolean;
+	/** One origin per line, e.g. `https://example.com`. */
+	allowedOrigins: string;
 	fields: AdminFormField[];
 	existingSlug?: string;
 }
@@ -47,6 +53,7 @@ export function createEmptyFormDraft(): FormDraft {
 		enabled: true,
 		notificationEmail: "",
 		turnstileRequired: false,
+		allowedOrigins: "",
 		fields: [
 			{
 				name: "email",
@@ -67,6 +74,7 @@ export function formToDraft(form: AdminForm): FormDraft {
 		enabled: form.enabled,
 		notificationEmail: form.notificationEmail ?? "",
 		turnstileRequired: form.turnstileRequired,
+		allowedOrigins: (form.allowedOrigins ?? []).join("\n"),
 		fields: form.schema.fields.map((field) => ({
 			...field,
 			label: field.label ?? getDefaultFieldLabel(field.name),
@@ -97,7 +105,7 @@ export function draftToUpsertRequest(draft: FormDraft): {
 			throw new Error("Field name is required.");
 		}
 
-		return {
+		const normalizedField: AdminFormField = {
 			name: normalizedName,
 			label: normalizeOptionalString(field.label),
 			type: field.type,
@@ -107,6 +115,16 @@ export function draftToUpsertRequest(draft: FormDraft): {
 					? field.maxLength
 					: undefined,
 		};
+
+		if (field.type === "select") {
+			const options = uniqueNonEmptyLines(field.options ?? []);
+			if (options.length === 0) {
+				throw new Error(`Field ${normalizedName} needs at least one option.`);
+			}
+			normalizedField.options = options;
+		}
+
+		return normalizedField;
 	});
 
 	return {
@@ -116,9 +134,21 @@ export function draftToUpsertRequest(draft: FormDraft): {
 			enabled: draft.enabled,
 			notificationEmail: normalizeOptionalString(draft.notificationEmail)?.toLowerCase(),
 			turnstileRequired: draft.turnstileRequired,
+			allowedOrigins: parseAllowedOrigins(draft.allowedOrigins),
 			schema: { fields },
 		},
 	};
+}
+
+/** Splits a one-per-line textarea value into trimmed, unique origins. */
+export function parseAllowedOrigins(value: string): string[] {
+	return uniqueNonEmptyLines(
+		value.split(/[\n,]/).map((origin) => origin.trim().replace(/\/$/, "")),
+	);
+}
+
+function uniqueNonEmptyLines(values: string[]): string[] {
+	return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 function normalizeOptionalString(value: string | undefined): string | undefined {

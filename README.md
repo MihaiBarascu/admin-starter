@@ -96,6 +96,27 @@ npm run db:seed:remote -- admin
 
 Seed/demo data must be kept outside normal schema migrations.
 
+## Public Forms From Other Sites
+
+Static sites on other origins can post to a form:
+
+```http
+POST https://admin-starter.multiwebsite.org/api/forms/<slug>/submissions
+Content-Type: application/json
+
+{"payload": {"<fieldName>": "string or boolean"}, "turnstileToken": "<optional>"}
+```
+
+It returns `201 {"submitted": true, "id": "<uuid>"}` or `{"error": "<message>"}`
+with `400/403/404/429/502/503`. Unknown payload keys are rejected with `400`.
+
+Each site origin must be listed in that form's **Allowed origins** (admin UI:
+Forms -> Edit, one exact origin per line, e.g. `https://example.com` or
+`http://localhost:4321`). Other origins get `403` without CORS headers. Do not
+add site origins to `AUTH_TRUSTED_ORIGINS`; that list is only for auth/admin.
+Received messages are in the admin **Submissions** page. Details are in
+[docs/admin-guide.md](docs/admin-guide.md#forms-api).
+
 ## Verification
 
 ```bash

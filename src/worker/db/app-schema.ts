@@ -26,6 +26,8 @@ export const form = sqliteTable("form", {
 	turnstileRequired: integer("turnstile_required", { mode: "boolean" })
 		.default(false)
 		.notNull(),
+	// JSON array of exact browser origins allowed to submit cross-origin.
+	allowedOriginsJson: text("allowed_origins").default("[]").notNull(),
 	createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 	updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

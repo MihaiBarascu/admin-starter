@@ -197,7 +197,13 @@ The test config is `vitest.worker.config.ts`. Test files live in:
 tests/worker/
   setup.ts
   helpers/http.ts
+  helpers/forms.ts
   api.spec.ts
+  forms.spec.ts
+  forms-cross-origin.spec.ts
+  forms-field-types.spec.ts
+  form-submissions-admin.spec.ts
+  seeds.spec.ts
 ```
 
 The tests run inside the Workers runtime, not plain Node.js. This matters because Hono routes, Better Auth, D1, Drizzle, cookies, request headers, and future Workers bindings should be exercised in an environment close to production.
@@ -220,9 +226,15 @@ Current API coverage:
 - authenticated safety settings read/update
 - invalid safety payload rejection
 - same-origin public form submissions
+- cross-origin form submissions: allowed/denied preflight, exact-origin CORS
+  headers on success and error responses, 403 for unlisted origins, and
+  `AUTH_TRUSTED_ORIGINS` staying separate from form allowlists
+- `allowedOrigins` validation, `tel` and `select` field validation
+- admin submissions inbox list/detail/delete, pagination and session checks
 - form schema allowlist validation
 - form safety checks before D1 writes, Turnstile validation, and Resend email
-- Turnstile server-side validation for forms that require it
+- Turnstile server-side validation for forms that require it, including the
+  Siteverify hostname check
 
 For every new API route, add tests for:
 
@@ -290,6 +302,10 @@ keeps inline styles allowed because the current Vite/Tailwind/shadcn build needs
 them. Revisit the policy before adding third-party scripts, analytics, external
 images, or API origins.
 
+The CSP restricts what the admin page itself may load. It does not affect static
+sites calling the public forms API; that is governed by the per-form CORS
+allowlist described in [Forms API](#forms-api).
+
 ## Safety Module
 
 The starter includes runtime safety switches:
@@ -305,42 +321,121 @@ Future public write endpoints should check the safety module before doing expens
 
 ## Forms API
 
-The starter includes a same-origin public form ingestion API:
+The starter includes a public form ingestion API that can be called from the
+admin app itself and from static sites on other origins (for example other
+subdomains):
 
 ```text
-POST /api/forms/:slug/submissions
+POST    /api/forms/:slug/submissions       public, CORS per form
+OPTIONS /api/forms/:slug/submissions       CORS preflight
 ```
 
-Forms are configured by an authenticated admin route:
+Forms and their submissions are managed by authenticated admin routes:
 
 ```text
-PUT /api/admin/forms/:slug
+GET    /api/admin/forms
+PUT    /api/admin/forms/:slug
+GET    /api/admin/forms/submissions?form=<slug>&cursor=<cursor>&limit=<1-100>
+GET    /api/admin/forms/submissions/:id
+DELETE /api/admin/forms/submissions/:id
 ```
+
+The submissions list is ordered by `createdAt` descending and paginated with the
+opaque `nextCursor` returned by the previous page (`null` on the last page).
+Responses include the parsed payload, form slug/name, origin, submitter email,
+user agent and `createdAt`. The stored IP hash is never returned. The admin UI
+shows the inbox on the **Submissions** page.
 
 Each form stores a server-side field allowlist in D1. Public submissions are
-accepted only when the request `Origin` is trusted by `AUTH_TRUSTED_ORIGINS`,
+accepted only when the request `Origin` is allowed for that form (see below),
 the form is enabled, the global public API safety switch is enabled, emergency
 stop is off, and the daily public write limit has not been reached.
 
-The submission payload shape is:
+### Calling a form from a static site
 
-```json
-{
-  "payload": {
-    "email": "visitor@example.com",
-    "message": "Hello"
-  },
-  "turnstileToken": "optional-token"
-}
+Request contract (keep static sites on exactly this shape):
+
+```http
+POST https://admin-starter.multiwebsite.org/api/forms/<slug>/submissions
+Content-Type: application/json
+
+{"payload": {"<fieldName>": "string or boolean"}, "turnstileToken": "<optional>"}
 ```
 
+- `201 {"submitted": true, "id": "<uuid>"}` on success.
+- Errors return `{"error": "<message>"}` with `400` (validation, unknown
+  payload keys, malformed JSON, Turnstile failure), `403` (origin not allowed),
+  `404` (unknown or paused form), `413` (body over 32 KB), `429` (daily limit),
+  `502` (Turnstile unreachable) or `503` (public API disabled / misconfigured).
+
+Minimal browser example:
+
+```js
+const response = await fetch(
+	"https://admin-starter.multiwebsite.org/api/forms/contact/submissions",
+	{
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ payload: { email, message } }),
+	},
+);
+const result = await response.json(); // { submitted, id } or { error }
+```
+
+Do not send cookies (`credentials` must stay at the default); the endpoint never
+returns `Access-Control-Allow-Credentials`.
+
+### Allowed origins (CORS)
+
+Each form has `allowedOrigins`: a list of exact origins such as
+`https://stomatolog.multiwebsite.org` or `http://localhost:4321`. Configure it
+in the admin UI (Forms -> Edit -> Allowed origins, one per line) or through
+`PUT /api/admin/forms/:slug` with `"allowedOrigins": ["https://..."]`.
+Values must be `http` or `https` origins without path, query or credentials; a
+single trailing slash is removed. Add `http://localhost:<port>` only to forms
+you test locally, and remove it when no longer needed.
+
+CORS behavior on `/api/forms/:slug/submissions` only:
+
+- `Origin` equal to the admin app origin (`BETTER_AUTH_URL` or the serving
+  host) or listed in that form's `allowedOrigins`: the response echoes
+  `Access-Control-Allow-Origin: <exact origin>` with `Vary: Origin`, on success
+  and on every error response, so the browser can read `{error}`. Preflights
+  return `204` with `Access-Control-Allow-Methods: POST, OPTIONS`,
+  `Access-Control-Allow-Headers: Content-Type` and `Access-Control-Max-Age: 600`.
+- Any other or missing `Origin`: `403 {"error": "Forbidden origin."}` without
+  CORS headers.
+- `*` and credentials are never used.
+
+Public form routes do not use `AUTH_TRUSTED_ORIGINS`. That list still protects
+`/api/auth/*`, `/api/admin/*` and every other unsafe `/api/*` request; do not
+add static-site origins to it.
+
+`Origin` is only a browser-enforced control. Scripts can send any `Origin`, so
+keep Turnstile, the safety switches, the daily limit and a Cloudflare WAF rate
+limiting rule on `/api/forms/*` for public forms.
+
+### Field types
+
 The form schema decides which fields are accepted. Unknown fields are rejected
-instead of stored. Supported field types are `text`, `email`, `textarea`, and
-`checkbox`.
+instead of stored. Supported field types:
+
+- `text`, `textarea`, `email`: strings (email is lowercased and validated).
+- `checkbox`: boolean.
+- `tel`: string of 6-30 characters using digits, spaces, `+ - ( ) .`, with at
+  least one digit.
+- `select`: string that must exactly match one of the field's `options`
+  (`"options": ["A", "B"]`, required for `select`, rejected on other types).
+
+### Turnstile
 
 If a form has `turnstileRequired=true`, the Worker validates the token on the
 server through Cloudflare Turnstile Siteverify before writing the submission.
-Set the production secret before enabling that option:
+The Siteverify `hostname` must also be the hostname of one of the form's
+allowed origins or of the admin app, so a token solved on another site cannot
+be replayed. Add every static-site hostname to the Turnstile widget's hostname
+list in the Cloudflare dashboard. Set the production secret before enabling
+that option:
 
 ```bash
 npx wrangler secret put TURNSTILE_SECRET_KEY
