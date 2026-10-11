@@ -15,17 +15,20 @@ describe("AdminSidebar", () => {
 
 		expect(markup).toContain('href="/"');
 		expect(markup).toContain('href="/forms"');
+		expect(markup).toContain('href="/submissions"');
 		expect(markup).toContain("Forms");
+		expect(markup).toContain("Submissions");
 		expect(markup).not.toContain('href="#forms"');
 		expect(markup).not.toContain("Monitoring</a>");
 	});
 });
 
 describe("getAdminPageFromPath", () => {
-	it("routes only forms to its own admin page", () => {
+	it("routes forms and submissions to their own admin pages", () => {
 		expect(getAdminPageFromPath("/")).toBe("dashboard");
 		expect(getAdminPageFromPath("/forms")).toBe("forms");
 		expect(getAdminPageFromPath("/forms/")).toBe("forms");
+		expect(getAdminPageFromPath("/submissions")).toBe("submissions");
 		expect(getAdminPageFromPath("/unknown")).toBe("dashboard");
 	});
 });
@@ -42,6 +45,7 @@ describe("FormsPanel", () => {
 						enabled: true,
 						notificationEmail: "owner@example.test",
 						turnstileRequired: false,
+						allowedOrigins: ["https://stomatolog.multiwebsite.org"],
 						schema: {
 							fields: [
 								{ name: "email", type: "email", required: true, maxLength: 254 },
@@ -61,6 +65,7 @@ describe("FormsPanel", () => {
 		expect(markup).toContain("/api/forms/contact/submissions");
 		expect(markup).toContain("email, message");
 		expect(markup).toContain("owner@example.test");
+		expect(markup).toContain("https://stomatolog.multiwebsite.org");
 	});
 
 	it("shows manual seed guidance when no forms exist", () => {
@@ -95,10 +100,12 @@ describe("FormsPanel", () => {
 			enabled: false,
 			notificationEmail: " Owner@Example.COM ",
 			turnstileRequired: true,
+			allowedOrigins: ["https://stomatolog.multiwebsite.org", "http://localhost:4321"],
 			schema: {
 				fields: [
 					{ name: "email", type: "email", required: true, maxLength: 254 },
 					{ name: "message", label: "Message", type: "textarea", required: true },
+					{ name: "service", type: "select", options: ["A", "B"] },
 				],
 			},
 		});
@@ -109,9 +116,11 @@ describe("FormsPanel", () => {
 			enabled: false,
 			notificationEmail: " Owner@Example.COM ",
 			turnstileRequired: true,
+			allowedOrigins: "https://stomatolog.multiwebsite.org\nhttp://localhost:4321",
 			fields: [
 				{ name: "email", label: "Email", type: "email", required: true, maxLength: 254 },
 				{ name: "message", label: "Message", type: "textarea", required: true },
+				{ name: "service", label: "Service", type: "select", options: ["A", "B"] },
 			],
 		});
 	});
@@ -123,7 +132,20 @@ describe("FormsPanel", () => {
 			enabled: true,
 			notificationEmail: " Owner@Example.COM ",
 			turnstileRequired: false,
+			allowedOrigins:
+				" https://stomatolog.multiwebsite.org/ \n\nhttp://localhost:4321\nhttps://stomatolog.multiwebsite.org",
 			fields: [
+				{
+					name: " phone ",
+					type: "tel",
+					required: false,
+					options: ["ignored for non-select fields"],
+				},
+				{
+					name: "service",
+					type: "select",
+					options: [" Consultatie ", "", "Albire", "Albire"],
+				},
 				{
 					name: " email ",
 					label: " Email address ",
@@ -141,8 +163,18 @@ describe("FormsPanel", () => {
 				enabled: true,
 				notificationEmail: "owner@example.com",
 				turnstileRequired: false,
+				allowedOrigins: ["https://stomatolog.multiwebsite.org", "http://localhost:4321"],
 				schema: {
 					fields: [
+						{ name: "phone", label: undefined, type: "tel", required: false, maxLength: undefined },
+						{
+							name: "service",
+							label: undefined,
+							type: "select",
+							required: false,
+							maxLength: undefined,
+							options: ["Consultatie", "Albire"],
+						},
 						{
 							name: "email",
 							label: "Email address",
@@ -154,5 +186,16 @@ describe("FormsPanel", () => {
 				},
 			},
 		});
+	});
+
+	it("requires options for select fields", () => {
+		expect(() =>
+			draftToUpsertRequest({
+				...createEmptyFormDraft(),
+				slug: "booking",
+				name: "Booking",
+				fields: [{ name: "service", type: "select", options: ["", "  "] }],
+			}),
+		).toThrow("Field service needs at least one option.");
 	});
 });

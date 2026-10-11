@@ -1,4 +1,4 @@
-import { asc, count, eq, gte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lt, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { form, formSubmission } from "../../db/app-schema";
 import { getDb } from "../../db/client";
@@ -10,6 +10,7 @@ import {
 	type FormDefinition,
 	type FormField,
 	type FormSubmissionRequest,
+	type ListSubmissionsQuery,
 	type UpsertFormRequest,
 } from "./schema";
 
@@ -33,6 +34,7 @@ export type FormDto = {
 	schema: FormDefinition;
 	notificationEmail?: string;
 	turnstileRequired: boolean;
+	allowedOrigins: string[];
 	createdAt: Date;
 	updatedAt: Date;
 };
@@ -41,6 +43,25 @@ export type SubmissionMetadata = {
 	origin?: string;
 	ipAddress?: string;
 	userAgent?: string;
+	/** Origins of this admin app itself (always allowed, never need CORS). */
+	appOrigins: string[];
+};
+
+export type FormSubmissionDto = {
+	id: string;
+	formId: string;
+	formSlug: string;
+	formName: string;
+	payload: Record<string, unknown>;
+	origin?: string;
+	submitterEmail?: string;
+	userAgent?: string;
+	createdAt: Date;
+};
+
+export type FormSubmissionPage = {
+	submissions: FormSubmissionDto[];
+	nextCursor: string | null;
 };
 
 type ValidatedSubmission = {
@@ -66,6 +87,7 @@ export async function upsertForm(
 			schemaJson: JSON.stringify(input.schema),
 			notificationEmail: input.notificationEmail,
 			turnstileRequired: input.turnstileRequired,
+			allowedOriginsJson: JSON.stringify(input.allowedOrigins),
 			createdAt: now,
 			updatedAt: now,
 		})
@@ -77,6 +99,7 @@ export async function upsertForm(
 				schemaJson: JSON.stringify(input.schema),
 				notificationEmail: input.notificationEmail,
 				turnstileRequired: input.turnstileRequired,
+				allowedOriginsJson: JSON.stringify(input.allowedOrigins),
 				updatedAt: now,
 			},
 		});
@@ -93,6 +116,51 @@ export async function listForms(dbBinding: D1Database): Promise<FormDto[]> {
 	const db = getDb({ DB: dbBinding });
 	const rows = await db.select().from(form).orderBy(asc(form.slug));
 	return rows.map(toFormDto);
+}
+
+/**
+ * Origins of the admin app itself: the configured BETTER_AUTH_URL and the
+ * origin the Worker is actually serving the request on.
+ */
+export function getAppOrigins(env: Pick<AppBindings, "BETTER_AUTH_URL">, requestUrl: string): string[] {
+	const origins = new Set<string>([new URL(requestUrl).origin]);
+	if (env.BETTER_AUTH_URL) {
+		try {
+			origins.add(new URL(env.BETTER_AUTH_URL).origin);
+		} catch {
+			// Ignore a malformed BETTER_AUTH_URL; the request origin still applies.
+		}
+	}
+	return [...origins];
+}
+
+/**
+ * Returns true when `origin` may call the public submission endpoint of `slug`:
+ * either the admin app's own origin or an exact entry of the form's
+ * allowedOrigins. Unknown slugs only allow the app's own origin, so the
+ * response does not reveal which forms exist to arbitrary sites.
+ */
+export async function isSubmissionOriginAllowed(
+	dbBinding: D1Database,
+	slug: string,
+	origin: string | undefined,
+	appOrigins: string[],
+): Promise<boolean> {
+	if (!origin) {
+		return false;
+	}
+	if (appOrigins.includes(origin)) {
+		return true;
+	}
+
+	const db = getDb({ DB: dbBinding });
+	const rows = await db
+		.select({ allowedOriginsJson: form.allowedOriginsJson })
+		.from(form)
+		.where(eq(form.slug, slug))
+		.limit(1);
+	const row = rows[0];
+	return row ? parseAllowedOrigins(row.allowedOriginsJson).includes(origin) : false;
 }
 
 export async function createFormSubmission(
@@ -118,7 +186,12 @@ export async function createFormSubmission(
 	await enforceDailyPublicWriteLimit(env.DB, safety.settings.daily_public_write_limit);
 
 	if (row.turnstileRequired) {
-		await validateTurnstile(env, input.turnstileToken, metadata.ipAddress);
+		const allowedHostnames = new Set(
+			[...metadata.appOrigins, ...parseAllowedOrigins(row.allowedOriginsJson)].map(
+				(origin) => new URL(origin).hostname,
+			),
+		);
+		await validateTurnstile(env, input.turnstileToken, metadata.ipAddress, allowedHostnames);
 	}
 
 	const id = crypto.randomUUID();
@@ -165,9 +238,21 @@ function toFormDto(row: NonNullable<Awaited<ReturnType<typeof getFormRowBySlug>>
 		schema: parseFormDefinition(row.schemaJson),
 		notificationEmail: row.notificationEmail ?? undefined,
 		turnstileRequired: row.turnstileRequired,
+		allowedOrigins: parseAllowedOrigins(row.allowedOriginsJson),
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt,
 	};
+}
+
+function parseAllowedOrigins(json: string): string[] {
+	try {
+		const parsed: unknown = JSON.parse(json);
+		return Array.isArray(parsed)
+			? parsed.filter((value): value is string => typeof value === "string")
+			: [];
+	} catch {
+		return [];
+	}
 }
 
 function parseFormDefinition(schemaJson: string): FormDefinition {
@@ -245,6 +330,13 @@ function normalizeFieldValue(field: FormField, value: unknown): string | boolean
 		return undefined;
 	}
 
+	if (field.type === "select") {
+		if (!field.options?.includes(normalized)) {
+			throw new FormsServiceError(400, `${field.name} must be one of the allowed options.`);
+		}
+		return normalized;
+	}
+
 	const maxLength = field.maxLength ?? getDefaultMaxLength(field.type);
 	if (normalized.length > maxLength) {
 		throw new FormsServiceError(
@@ -255,6 +347,10 @@ function normalizeFieldValue(field: FormField, value: unknown): string | boolean
 
 	if (field.type === "email" && !formEmailIsValid(normalized)) {
 		throw new FormsServiceError(400, `${field.name} must be a valid email address.`);
+	}
+
+	if (field.type === "tel" && !TEL_PATTERN.test(normalized)) {
+		throw new FormsServiceError(400, `${field.name} must be a valid phone number.`);
 	}
 
 	return normalized;
@@ -268,10 +364,18 @@ function getDefaultMaxLength(type: FormField["type"]): number {
 			return 5_000;
 		case "text":
 			return 500;
+		case "tel":
+			return 30;
+		case "select":
+			return 200;
 		case "checkbox":
 			return 0;
 	}
 }
+
+// Light phone validation: 6-30 characters of digits, spaces, + - ( ) . and at
+// least one digit. Country-specific rules are left to the frontend.
+const TEL_PATTERN = /^(?=.*\d)[\d +\-().]{6,30}$/;
 
 function formEmailIsValid(email: string): boolean {
 	return z.email().safeParse(email).success;
@@ -300,6 +404,7 @@ async function validateTurnstile(
 	env: AppBindings,
 	token: string | undefined,
 	remoteIp: string | undefined,
+	allowedHostnames: Set<string>,
 ): Promise<void> {
 	if (!token) {
 		throw new FormsServiceError(400, "Turnstile token is required.");
@@ -326,8 +431,15 @@ async function validateTurnstile(
 			throw new FormsServiceError(502, "Form verification failed.");
 		}
 
-		const result = (await response.json().catch(() => null)) as { success?: boolean } | null;
+		const result = (await response.json().catch(() => null)) as {
+			success?: boolean;
+			hostname?: string;
+		} | null;
 		if (!result?.success) {
+			throw new FormsServiceError(400, "Form verification failed.");
+		}
+		// A valid token solved on a different site must not be replayable here.
+		if (!result.hostname || !allowedHostnames.has(result.hostname.toLowerCase())) {
 			throw new FormsServiceError(400, "Form verification failed.");
 		}
 	} catch (error) {
@@ -353,4 +465,129 @@ async function hashIpAddress(
 	return [...new Uint8Array(digest)]
 		.map((byte) => byte.toString(16).padStart(2, "0"))
 		.join("");
+}
+
+export async function listFormSubmissions(
+	dbBinding: D1Database,
+	query: ListSubmissionsQuery,
+): Promise<FormSubmissionPage> {
+	const db = getDb({ DB: dbBinding });
+	const conditions: SQL[] = [];
+	if (query.form) {
+		conditions.push(eq(form.slug, query.form));
+	}
+	if (query.cursor) {
+		const cursor = decodeSubmissionCursor(query.cursor);
+		const cursorCondition = or(
+			lt(formSubmission.createdAt, cursor.createdAt),
+			and(eq(formSubmission.createdAt, cursor.createdAt), lt(formSubmission.id, cursor.id)),
+		);
+		if (cursorCondition) {
+			conditions.push(cursorCondition);
+		}
+	}
+
+	const rows = await selectSubmissionRows(db)
+		.where(conditions.length > 0 ? and(...conditions) : undefined)
+		.orderBy(desc(formSubmission.createdAt), desc(formSubmission.id))
+		.limit(query.limit + 1);
+
+	const page = rows.slice(0, query.limit);
+	const last = page.at(-1);
+	return {
+		submissions: page.map(toSubmissionDto),
+		nextCursor:
+			rows.length > query.limit && last ? encodeSubmissionCursor(last.createdAt, last.id) : null,
+	};
+}
+
+export async function getFormSubmission(
+	dbBinding: D1Database,
+	id: string,
+): Promise<FormSubmissionDto> {
+	const db = getDb({ DB: dbBinding });
+	const rows = await selectSubmissionRows(db).where(eq(formSubmission.id, id)).limit(1);
+	const row = rows[0];
+	if (!row) {
+		throw new FormsServiceError(404, "Submission not found.");
+	}
+	return toSubmissionDto(row);
+}
+
+export async function deleteFormSubmission(dbBinding: D1Database, id: string): Promise<void> {
+	const db = getDb({ DB: dbBinding });
+	const deleted = await db
+		.delete(formSubmission)
+		.where(eq(formSubmission.id, id))
+		.returning({ id: formSubmission.id });
+	if (deleted.length === 0) {
+		throw new FormsServiceError(404, "Submission not found.");
+	}
+}
+
+// ipHash is intentionally never selected for admin responses.
+function selectSubmissionRows(db: ReturnType<typeof getDb>) {
+	return db
+		.select({
+			id: formSubmission.id,
+			formId: formSubmission.formId,
+			formSlug: form.slug,
+			formName: form.name,
+			payloadJson: formSubmission.payloadJson,
+			origin: formSubmission.origin,
+			submitterEmail: formSubmission.submitterEmail,
+			userAgent: formSubmission.userAgent,
+			createdAt: formSubmission.createdAt,
+		})
+		.from(formSubmission)
+		.innerJoin(form, eq(formSubmission.formId, form.id));
+}
+
+type SubmissionRow = Awaited<ReturnType<ReturnType<typeof selectSubmissionRows>["all"]>>[number];
+
+function toSubmissionDto(row: SubmissionRow): FormSubmissionDto {
+	return {
+		id: row.id,
+		formId: row.formId,
+		formSlug: row.formSlug,
+		formName: row.formName,
+		payload: parseSubmissionPayload(row.payloadJson),
+		origin: row.origin ?? undefined,
+		submitterEmail: row.submitterEmail ?? undefined,
+		userAgent: row.userAgent ?? undefined,
+		createdAt: row.createdAt,
+	};
+}
+
+function parseSubmissionPayload(json: string): Record<string, unknown> {
+	try {
+		const parsed: unknown = JSON.parse(json);
+		return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+			? (parsed as Record<string, unknown>)
+			: {};
+	} catch {
+		return {};
+	}
+}
+
+function encodeSubmissionCursor(createdAt: Date, id: string): string {
+	return btoa(`${createdAt.getTime()}:${id}`)
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/, "");
+}
+
+function decodeSubmissionCursor(cursor: string): { createdAt: Date; id: string } {
+	try {
+		const decoded = atob(cursor.replace(/-/g, "+").replace(/_/g, "/"));
+		const separator = decoded.indexOf(":");
+		const timestamp = Number(decoded.slice(0, separator));
+		const id = decoded.slice(separator + 1);
+		if (separator > 0 && Number.isSafeInteger(timestamp) && id) {
+			return { createdAt: new Date(timestamp), id };
+		}
+	} catch {
+		// Fall through to the validation error below.
+	}
+	throw new FormsServiceError(400, "Cursor is invalid.");
 }

@@ -1,10 +1,15 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { except } from "hono/combine";
 import { secureHeaders } from "hono/secure-headers";
 import { createAuth } from "./auth";
 import { requireAdminSession } from "./auth/middleware";
 import { bootstrapRoutes } from "./modules/bootstrap/routes";
-import { adminFormsRoutes, formsRoutes } from "./modules/forms/routes";
+import {
+	adminFormsRoutes,
+	formsRoutes,
+	publicSubmissionCors,
+} from "./modules/forms/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { meRoutes } from "./modules/me/routes";
 import { safetyRoutes } from "./modules/safety/routes";
@@ -37,8 +42,14 @@ app.use(
 		xFrameOptions: "DENY",
 	}),
 );
+// Public form submissions are called cross-origin by static sites. Their
+// origin check is per form (allowedOrigins) and lives in publicSubmissionCors,
+// registered before the body limit so even 413 responses carry CORS headers.
+app.use("/api/forms/:slug/submissions", publicSubmissionCors);
 app.use("/api/*", apiBodyLimit);
-app.use("/api/*", requireTrustedOrigin);
+// Auth, admin and every other unsafe /api/* request still require an
+// AUTH_TRUSTED_ORIGINS origin. Only the public forms routes are excluded.
+app.use("/api/*", except("/api/forms/*", requireTrustedOrigin));
 
 app.get("/api/", (c) => {
 	return c.json({
@@ -64,7 +75,12 @@ app.route("/api/admin/safety", safetyRoutes);
 
 app.onError((error, c) => {
 	if (error instanceof HTTPException) {
-		return error.getResponse();
+		if (error.res) {
+			return error.getResponse();
+		}
+		// Keep the `{ error }` JSON contract for framework errors such as
+		// malformed JSON bodies.
+		return c.json({ error: error.message || "Request failed." }, error.status);
 	}
 	console.error("Unhandled Worker error", error);
 	return c.json({ error: "Internal server error." }, 500);

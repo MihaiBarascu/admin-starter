@@ -1,0 +1,1 @@
+ALTER TABLE `form` ADD `allowed_origins` text DEFAULT '[]' NOT NULL;

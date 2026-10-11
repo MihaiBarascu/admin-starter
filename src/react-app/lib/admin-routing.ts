@@ -1,13 +1,20 @@
-export type AdminPage = "dashboard" | "forms";
+export type AdminPage = "dashboard" | "forms" | "submissions";
 
 export const adminPagePaths: Record<AdminPage, string> = {
 	dashboard: "/",
 	forms: "/forms",
+	submissions: "/submissions",
 };
 
 export function getAdminPageFromPath(pathname: string): AdminPage {
 	const normalizedPath = pathname.replace(/\/+$/, "") || "/";
-	return normalizedPath === adminPagePaths.forms ? "forms" : "dashboard";
+	if (normalizedPath === adminPagePaths.forms) {
+		return "forms";
+	}
+	if (normalizedPath === adminPagePaths.submissions) {
+		return "submissions";
+	}
+	return "dashboard";
 }
 
 export function getCurrentAdminPage(): AdminPage {

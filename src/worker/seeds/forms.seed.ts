@@ -15,6 +15,7 @@ const DEFAULT_FORMS: SeedForm[] = [
 		notificationEmail: "admin@example.test",
 		enabled: true,
 		turnstileRequired: false,
+		allowedOrigins: [],
 		schema: {
 			fields: [
 				{
@@ -38,6 +39,7 @@ const DEFAULT_FORMS: SeedForm[] = [
 		notificationEmail: "admin@example.test",
 		enabled: true,
 		turnstileRequired: false,
+		allowedOrigins: [],
 		schema: {
 			fields: [
 				{

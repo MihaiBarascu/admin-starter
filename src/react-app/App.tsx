@@ -10,6 +10,7 @@ import {
 	ExternalLink,
 	FileText,
 	Gauge,
+	Inbox,
 	LayoutDashboard,
 	LockKeyhole,
 	LogOut,
@@ -40,6 +41,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { FormsPanel } from "./forms-admin";
+import { SubmissionsPage } from "./submissions-admin";
 import { authClient, type AuthSession } from "./lib/auth-client";
 import {
 	adminPagePaths,
@@ -249,13 +251,9 @@ function App() {
 				<div className="flex min-w-0 flex-col">
 					<header className="flex h-14 items-center justify-between border-b bg-background px-4 lg:px-6">
 						<div>
-							<p className="text-sm font-medium">
-								{adminPage === "forms" ? "Forms" : "Admin Starter"}
-							</p>
+							<p className="text-sm font-medium">{adminPageTitles[adminPage].title}</p>
 							<p className="text-xs text-muted-foreground">
-								{adminPage === "forms"
-									? "Public form endpoints"
-									: "D1 + Drizzle + Better Auth"}
+								{adminPageTitles[adminPage].description}
 							</p>
 						</div>
 						<UserMenu user={user} onSignOut={() => void handleSignOut()} />
@@ -271,6 +269,8 @@ function App() {
 						) : null}
 						{adminPage === "forms" ? (
 							<FormsPanel forms={forms} onSave={saveForm} />
+						) : adminPage === "submissions" ? (
+							<SubmissionsPage forms={forms} />
 						) : (
 							<>
 								<OverviewCards safety={safety} />
@@ -284,6 +284,12 @@ function App() {
 		</div>
 	);
 }
+
+const adminPageTitles: Record<AdminPage, { title: string; description: string }> = {
+	dashboard: { title: "Admin Starter", description: "D1 + Drizzle + Better Auth" },
+	forms: { title: "Forms", description: "Public form endpoints" },
+	submissions: { title: "Submissions", description: "Messages received through forms" },
+};
 
 function getResetPasswordToken(): string | null {
 	if (typeof window === "undefined" || window.location.pathname !== "/reset-password") {
@@ -346,6 +352,20 @@ export function AdminSidebar(props: {
 					>
 						<FileText className="h-4 w-4" />
 						Forms
+					</a>
+				</Button>
+				<Button
+					asChild
+					variant={activePage === "submissions" ? "secondary" : "ghost"}
+					className="justify-start"
+				>
+					<a
+						href={adminPagePaths.submissions}
+						aria-current={activePage === "submissions" ? "page" : undefined}
+						onClick={(event) => handleNavigation(event, "submissions")}
+					>
+						<Inbox className="h-4 w-4" />
+						Submissions
 					</a>
 				</Button>
 			</nav>
