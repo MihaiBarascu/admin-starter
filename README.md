@@ -2,6 +2,17 @@
 
 Cloudflare Workers starter for reusable admin applications.
 
+In production it is the form backend for several static websites
+([Serenident](https://stomatolog.multiwebsite.org),
+[Alcov Imobiliare](https://imobiliare.multiwebsite.org),
+[Fior Roastery](https://cafea.multiwebsite.org)): each site posts to its own form,
+submissions are validated server-side, stored in D1 and announced by email through
+Resend, and the admin panel shows everything received.
+
+| Dashboard with runtime safety switches | A received order |
+| --- | --- |
+| ![Admin dashboard with safety switches and monitoring links](docs/screenshots/dashboard.png) | ![Submission detail for an order sent from a shop cart](docs/screenshots/submission.png) |
+
 ## Stack
 
 - Cloudflare Workers + Workers Assets
